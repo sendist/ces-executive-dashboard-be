@@ -1,0 +1,47 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+        
+model RawCsat {
+  id              Int    @id @default(autoincrement())
+  interactionId   String   
+  createdAt       DateTime  
+  status          String?   
+  answeredAt      DateTime?
+  customer        String? 
+  ticketNumbers   String?   @db.Text
+  question1       String?
+  question2       String?
+  question3       String?
+  question4       String?
+  question5       String?
+  question6       String?
+  numeric         Int?     
+  channel         String?
+  assignedAgent   String?
+
+  @@index([createdAt])
+}
+
+model DailyCsatStat {
+  id                Int      @id @default(autoincrement())
+  date              DateTime @unique
+  totalSurvey       Int      @default(0) // Count of all rows
+  totalDijawab      Int      @default(0) // Count where answeredAt is not null
+  totalJawaban45    Int      @default(0) // Count where numericScore >= 4
+  persenCsat        Float    @default(0) // (totalJawaban45 / totalDijawab) * 100
+  scoreCsat         Float    @default(0) // Average of numericScore
+}
