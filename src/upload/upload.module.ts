@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { UploadController } from './upload.controller';
 import { PrismaService } from '../../prisma/prisma.service'; // Assuming you have this
-import { ExcelProcessor } from '../utils/excel.processor';
+import { ExcelProcessor } from '../worker/excel.processor';
 
 @Module({
   imports: [

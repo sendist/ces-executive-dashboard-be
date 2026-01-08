@@ -46,3 +46,122 @@ model DailyCsatStat {
   persenCsat        Float    @default(0) // (totalJawaban45 / totalDijawab) * 100
   scoreCsat         Float    @default(0) // Average of numericScore
 }
+
+model RawOmnix {
+  // Use a UUID for the row ID, as Excel imports might contain duplicate ticket_ids
+  id               Int      @id @default(autoincrement())
+
+  // --- IDs & Basic Info ---
+  ticketId         Int?     @unique @map("ticket_id")
+  remark           String?  @db.Text // Using Text because remarks can be very long
+  subject          String?  @db.Text
+  priorityId       Int?     @map("priority_id")
+  priorityName     String?  @map("priority_name")
+  ticketStatusId   Int?     @map("ticket_status_id")
+  ticketStatusName String?  @map("ticket_status_name")
+  unitId           Int?     @map("unit_id")
+  unitName         String?  @map("unit_name")
+
+  // --- People / Informants ---
+  // Using String for IDs because examples were quoted ('1670')
+  informantId    String? @map("informant_id")
+  informantName  String? @map("informant_name")
+  informantHp    String? @map("informant_hp")
+  informantEmail String? @map("informant_email")
+  customerId     String? @map("customer_id")
+  customerName   String? @map("customer_name")
+  customerHp     String? @map("customer_hp")
+  customerEmail  String? @map("customer_email")
+
+  // --- Dates (Interaction) ---
+  // Ensure your Processor converts "16.06.2025" to a valid Date object
+  dateOriginInteraction      DateTime? @map("date_origin_interaction")
+  dateStartInteraction       DateTime? @map("date_start_interaction")
+  dateOpen                   DateTime? @map("date_open")
+  dateClose                  DateTime? @map("date_close")
+  dateLastUpdate             DateTime? @map("date_last_update")
+  dateCreatedAt              DateTime? @map("date_created_at")
+  datePickupInteraction      DateTime? @map("date_pickup_interaction")
+  dateEndInteraction         DateTime? @map("date_end_interaction")
+  dateFirstPickupInteraction DateTime? @map("date_first_pickup_interaction")
+  dateFirstResponseInteraction DateTime? @map("date_first_response_interaction")
+
+  // --- Categorization ---
+  isEscalated        String? @map("is_escalated") // "escalated" is a string in example
+  createdById        Int?    @map("created_by_id")
+  createdByName      String? @map("created_by_name")
+  updatedById        Int?    @map("updated_by_id")
+  updatedByName      String? @map("updated_by_name")
+  channelId          Int?    @map("channel_id")
+  channelName        String? @map("channel_name")
+  sessionId          String? @map("session_id")
+  categoryId         Int?    @map("category_id")
+  categoryName       String? @map("category_name")
+  mainCategory       String? // Matches "mainCategory"
+  category           String? // Matches "category"
+  subCategory        String? // Matches "subCategory"
+  detailSubCategory  String? // Matches "detailSubCategory"
+  detailSubCategory2 String? // Matches "detailSubCategory2"
+
+  // --- Metrics & SLAs ---
+  sla        String? // Example: "03:00:00" (Time Interval as String)
+  slaSecond  Int?    @map("sla_second")
+  waitingTime String? // Duration string "00:00:00"
+  serviceTime String? // Duration string
+  responseTime String? // Duration string
+  handlingTime String? // Duration string
+  duration     String?
+  acw          String? // After Call Work
+
+  // --- Additional Info ---
+  account             String?
+  accountName         String? @map("account_name")
+  informantMemberId   String? @map("informant_member_id")
+  customerMemberId    String? @map("customer_member_id")
+  sentimentIncoming   String? @map("sentiment_incoming")
+  sentimentOutgoing   String? @map("sentiment_outgoing")
+  sentimentAll        String? @map("sentiment_all")
+  feedback            String? @db.Text
+  sentimentService    String? @map("sentiment_service")
+  parentId            String? @map("parent_id")
+  countMerged         Int?    @map("count_merged")
+  sourceId            Int?    @map("source_id")
+  sourceName          String? @map("source_name")
+  
+  // This column contains JSON data in your example
+  contact             Json?   
+
+  surveyName                String? @map("survey_name")
+  interactionAdditionalInfo Json?   @map("interaction_additional_info") // Likely JSON or Text
+  surveyId                  String? @map("survey_id")
+  respondentId              String? @map("respondent_id")
+  ticketIdOld               String? @map("ticket_id_old")
+  ticketPerusahaan          String? @map("ticket_perusahaan")
+  ticketAmount              String? @map("ticket_Amount") // Capital A in source
+  ticketRemedyNo            String? @map("ticket_Remedy_NO")
+  
+  // Handling special characters in column names
+  ticketITAO                String? @map("ticket_IT/AO") 
+  
+  ticketProject             String? @map("ticket_Project")
+  ticketIdMasking           String? @map("ticketId_masking")
+  informantNamaCorp         String? @map("informant_nama_corp")
+  customerNamaCorp          String? @map("customer_nama_corp")
+
+  // --- Escalation & Resolution Dates ---
+  datePending      DateTime? @map("date_pending")
+  dateResolve      DateTime? @map("date_resolve")
+  
+  // Columns with spaces in names
+  dateEskalasiEbo  DateTime? @map("date_eskalasi ebo")
+  dateEskalasiIt   DateTime? @map("date_eskalasi it")
+  dateEskalasiNo   DateTime? @map("date_eskalasi no")
+  dateEskalasi     DateTime? @map("date_eskalasi")
+  dateMenunggu     DateTime? @map("date_menunggu")
+
+  partner            String?
+  approvalBillco     String? @map("approval billco")
+  customerInstagramId String? @map("customer_instagram_id")
+  customerPhone      String? @map("customer_phone")
+  customerFacebookId String? @map("customer_facebook_id") 
+}

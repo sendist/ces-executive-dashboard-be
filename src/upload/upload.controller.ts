@@ -3,18 +3,19 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { diskStorage } from 'multer';
+import path from 'path';
 
 @Controller('upload')
 export class UploadController {
   constructor(@InjectQueue('excel-queue') private excelQueue: Queue) {}
 
-  @Post()
+  @Post('csat-report')
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({ destination: './uploads' }) // Save temp file
   }))
   async uploadExcel(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
-    await this.excelQueue.add('process-excel', {
+    await this.excelQueue.add('process-csat-report', {
       path: file.path,
       filename: file.originalname,
     });
@@ -22,6 +23,22 @@ export class UploadController {
     // 2. Return success immediately (User doesn't wait)
     return { message: 'File received. Processing started.', jobId: file.filename };
   }
+
+  @Post('omnix-report')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({ destination: './uploads' }) // Save temp file
+  }))
+  async uploadOmnixReport(@UploadedFile() file: Express.Multer.File) {
+    // 1. Send job to the queue immediately
+    await this.excelQueue.add('process-omnix-report', {
+      path: file.path,
+      filename: file.originalname,
+    });
+
+    // 2. Return success immediately (User doesn't wait)
+    return { message: 'Omnix report received. Processing started.', jobId: file.filename };
+  }
+
 
   @Get('status/:jobId')
   async getJobStatus(@Param('jobId') jobId: string) {
