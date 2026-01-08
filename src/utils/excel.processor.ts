@@ -68,14 +68,119 @@ export class ExcelProcessor extends WorkerHost {
     return { status: 'Completed' };
   }
 
-  private async saveBatch(rows) {
-    // skipDuplicates ensures if you upload the same file twice, 
-    // it won't crash on the unique InteractionID constraint.
-    await this.prisma.rawCsat.createMany({ 
-      data: rows, 
-      skipDuplicates: true 
-    });
+  // private async saveBatch(rows) {
+  //   // skipDuplicates ensures if you upload the same file twice, 
+  //   // it won't crash on the unique InteractionID constraint.
+  //   await this.prisma.rawCsat.createMany({ 
+  //     data: rows, 
+  //     skipDuplicates: true 
+  //   });
+  // }
+
+  private async saveBatch(rows: any[]) {
+    if (rows.length === 0) return;
+
+    // 1. DEDUPLICATE IN MEMORY
+    // We use a Map to ensure only one entry per (createdAt + customer) exists in this batch.
+    // If duplicates exist in the batch, the LAST one in the list "wins" (overwrites previous).
+    const uniqueRowsMap = new Map<string, any>();
+    const internalDuplicates: any[] = [];
+
+    for (const row of rows) {
+        const uniqueKey = `${row.createdAt.toISOString()}_${row.customer}`;
+        
+        if (uniqueRowsMap.has(uniqueKey)) {
+          // This is a duplicate within the Excel file itself
+          internalDuplicates.push({ 
+            customer: row.customer, 
+            date: row.createdAt,
+            reason: 'Duplicate found inside the same Excel batch'
+          });
+        } else {
+          uniqueRowsMap.set(uniqueKey, row);
+        }
+      }
+
+      // Log internal duplicates if any
+      if (internalDuplicates.length > 0) {
+        console.log('internal Duplicates Skipped:', internalDuplicates);
+      }
+
+    // Convert back to array
+    const cleanRows = Array.from(uniqueRowsMap.values());
+
+    // 2. Map rows to SQL tuple strings
+    const values = cleanRows
+      .map((row) => {
+        return `(
+          ${this.formatSqlValue(row.createdAt)},
+          ${this.formatSqlValue(row.customer)},
+          ${this.formatSqlValue(row.status)},
+          ${this.formatSqlValue(row.answeredAt)},
+          ${this.formatSqlValue(row.ticketNumbers)},
+          ${this.formatSqlValue(row.interactionId)},
+          ${this.formatSqlValue(row.question1)},
+          ${this.formatSqlValue(row.numeric)},
+          ${this.formatSqlValue(row.question2)},
+          ${this.formatSqlValue(row.question3)},
+          ${this.formatSqlValue(row.question4)},
+          ${this.formatSqlValue(row.question5)},
+          ${this.formatSqlValue(row.question6)},
+          ${this.formatSqlValue(row.channel)},
+          ${this.formatSqlValue(row.assignedAgent)}
+        )`;
+      })
+      .join(',');
+
+    // 3. Construct the full Query
+    const query = `
+      INSERT INTO "RawCsat" (
+        "createdAt", "customer", "status", "answeredAt", 
+        "ticketNumbers", "interactionId", "question1", "numeric", 
+        "question2", "question3", "question4", "question5", 
+        "question6", "channel", "assignedAgent"
+      )
+      VALUES ${values}
+      ON CONFLICT ("createdAt", "customer") 
+      DO UPDATE SET 
+        "status"        = EXCLUDED."status",
+        "answeredAt"    = EXCLUDED."answeredAt",
+        "ticketNumbers" = EXCLUDED."ticketNumbers",
+        "interactionId" = EXCLUDED."interactionId",
+        "question1"     = EXCLUDED."question1",
+        "numeric"       = EXCLUDED."numeric",
+        "question2"     = EXCLUDED."question2",
+        "question3"     = EXCLUDED."question3",
+        "question4"     = EXCLUDED."question4",
+        "question5"     = EXCLUDED."question5",
+        "question6"     = EXCLUDED."question6",
+        "channel"       = EXCLUDED."channel",
+        "assignedAgent" = EXCLUDED."assignedAgent";
+    `;
+
+    await this.prisma.$executeRawUnsafe(query);
   }
+
+    // Helper to safely format values for Raw SQL
+  formatSqlValue = (value: any): string => {
+    if (value === null || value === undefined) {
+      return 'NULL';
+    }
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    if (value instanceof Date) {
+      // PostgreSQL expects single quotes for dates: '2025-01-01T10:00:00.000Z'
+      return `'${value.toISOString()}'`;
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'TRUE' : 'FALSE';
+    }
+    // For strings, escape single quotes by doubling them (Standard SQL)
+    // e.g. "User's" becomes "User''s"
+    const safeString = value.toString().replace(/'/g, "''");
+    return `'${safeString}'`;
+  };
 
   private async refreshDailyStats() {
     // This SQL creates your exact JSON requirements
@@ -174,22 +279,5 @@ export class ExcelProcessor extends WorkerHost {
       }
 
       return null;
-  }
-
-  extractFirstId(rawValue: any): string | null {
-    if (!rawValue) return null;
-
-    // 1. Ensure it's a string
-    const strValue = rawValue.toString();
-
-    // 2. Split by semicolon first (to handle multiple IDs)
-    const firstPart = strValue.split(';')[0];
-
-    // 3. Remove quotes (both " and ') AND trim whitespace
-    //    Regex /['"]/g matches all instances of ' or "
-    const cleanId = firstPart.replace(/['"]/g, '').trim();
-
-    // 4. Basic safety
-    return cleanId.length > 0 ? cleanId : null;
   }
 }
