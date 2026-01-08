@@ -165,3 +165,34 @@ model RawOmnix {
   customerPhone      String? @map("customer_phone")
   customerFacebookId String? @map("customer_facebook_id") 
 }
+
+model RawCall {
+  // Synthetic ID because this data doesn't seem to have a unique Ticket ID
+  id            Int       @id @default(autoincrement())
+
+  updateStamp   DateTime? @map("Update_Stamp")
+  msisdn        String?   @map("MSISDN")
+  brand         String?   @map("BRAND")
+  unitType      String?   @map("UNIT_TYPE")
+  unitName      String?   @map("UNIT_NAME")
+  areaName      String?   @map("AREA_NAME")
+  regName       String?   @map("REG_NAME")
+  topicReason1  String?   @map("TOPIC_REASON_1")
+  topicReason2  String?   @map("TOPIC_REASON_2")
+  topicResult   String?   @map("TOPIC_RESULT")
+  service       String?   @map("SERVICE")
+  appId         String?   @map("APP_ID")
+  userId        String?   @map("USER_ID")
+  employeeCode  String?   @map("EMPLOYEE_CODE")
+  employeeName  String?   @map("EMPLOYEE_NAME")
+  
+  // Use Text for long content
+  notes         String?   @db.Text @map("NOTES")
+
+  // Optional: Add index for faster searching
+  @@index([msisdn])
+  @@index([updateStamp])
+
+  @@unique([updateStamp, msisdn])
+}
+

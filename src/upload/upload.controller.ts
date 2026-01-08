@@ -39,6 +39,21 @@ export class UploadController {
     return { message: 'Omnix report received. Processing started.', jobId: file.filename };
   }
 
+  @Post('call-report')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({ destination: './uploads' }) // Save temp file
+  }))
+  async uploadCallReport(@UploadedFile() file: Express.Multer.File) {
+    // 1. Send job to the queue immediately
+    await this.excelQueue.add('process-call-report', {
+      path: file.path,
+      filename: file.originalname,
+    });
+
+    // 2. Return success immediately (User doesn't wait)
+    return { message: 'Omnix report received. Processing started.', jobId: file.filename };
+  }
+
 
   @Get('status/:jobId')
   async getJobStatus(@Param('jobId') jobId: string) {
