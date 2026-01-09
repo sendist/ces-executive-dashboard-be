@@ -196,3 +196,73 @@ model RawCall {
   @@unique([updateStamp, msisdn])
 }
 
+model RawOca {
+  id              Int     @id @default(autoincrement())
+
+  // --- Basic Info ---
+  ticketNumber    String  @unique @map("ticket_number")
+  ticketSubject   String? @map("ticket_subject")
+  channel         String? @map("channel")
+  category        String? @map("category")
+  reporter        String? @map("reporter")
+  assignee        String? @map("assignee")
+  department      String? @map("department")
+  priority        String? @map("priority")
+  lastStatus      String? @map("last_status")
+
+  // --- Dates ---
+  ticketCreated   DateTime? @map("ticket_created")
+  lastUpdate      DateTime? @map("last_update")
+
+  // --- Details ---
+  description     String?   @db.Text @map("description")
+  customerName    String?   @map("customer_name")
+  customerPhone   String?   @map("customer_phone")
+  customerAddress String?   @map("customer_address")
+  customerEmail   String?   @map("customer_email")
+
+  // --- Durations & Times ---
+  firstResponseTime   DateTime? @map("first_response_time")
+  totalResponseTime   String?   @map("total_response_time")
+  totalResolutionTime String?   @map("total_resolution_time")
+  resolveTime         DateTime? @map("resolve_time")
+  resolvedBy          String?   @map("resolved_by")
+  closedTime          DateTime? @map("closed_time")
+  ticketDuration      String?   @map("ticket_duration")
+
+  // --- Metrics ---
+  countInboundMessage   Int?    @map("count_inbound_message")
+  labelInRoom           String? @map("label_in_room")
+  firstResponseDuration String? @map("first_response_duration")
+  
+  escalateTicket         String? @map("escalate_ticket")
+  lastAssigneeEscalation String? @map("last_assignee_escalation")
+  lastStatusEscalation   String? @map("last_status_escalation")
+  lastUpdateEscalation   String? @map("last_update_escalation")
+  
+  converse           String? @map("converse")
+  moveToOtherChannel String? @map("move_to_other_channel")
+  previousChannel    String? @map("previous_channel")
+  
+  amountRevenue BigInt? @map("amount_revenue")
+  jumlahMsisdn  String?   @map("jumlah_msisdn")
+  
+  tags          String? @map("tags")
+  idRemedyNo    String? @map("id_remedy_no")
+  
+  // Cleaned up the complex column name
+  eskalasiIdRemedyItAoEms String? @map("eskalasi_id_remedy_it_ao_ems")
+  
+  reasonOsl      String? @map("reason_osl")
+  projectId      String? @map("project_id")
+  namaPerusahaan String? @map("nama_perusahaan")
+  roaming        String? @map("roaming")
+  subCategory    String? @map("sub_category")
+  detailCategory String? @map("detail_category")
+  iot            String? @map("iot")
+  updatedAtExcel DateTime? @map("updated_at_excel") // Was "Updated at"
+
+  @@index([ticketNumber])
+  @@index([ticketCreated])
+  @@index([lastUpdate])
+}

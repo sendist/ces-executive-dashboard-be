@@ -51,7 +51,22 @@ export class UploadController {
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'Omnix report received. Processing started.', jobId: file.filename };
+    return { message: 'Call report received. Processing started.', jobId: file.filename };
+  }
+
+  @Post('oca-report')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({ destination: './uploads' }) // Save temp file
+  }))
+  async uploadOcaReport(@UploadedFile() file: Express.Multer.File) {
+    // 1. Send job to the queue immediately
+    await this.excelQueue.add('process-oca-report', {
+      path: file.path,
+      filename: file.originalname,
+    });
+
+    // 2. Return success immediately (User doesn't wait)
+    return { message: 'OCA report received. Processing started.', jobId: file.filename };
   }
 
 

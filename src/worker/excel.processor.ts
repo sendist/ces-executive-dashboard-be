@@ -3,6 +3,8 @@ import { Job } from 'bullmq';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { parse } from 'path';
+import * as fs from 'fs';
+import csv from 'csv-parser';
 
 @Processor('excel-queue')
 export class ExcelProcessor extends WorkerHost {
@@ -19,9 +21,201 @@ export class ExcelProcessor extends WorkerHost {
         return this.processOmnixFile(job);
       case 'process-call-report':
         return this.processCallFile(job);
+      case 'process-oca-report':
+        return this.processOcaReport(job);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
+  }
+
+  // Call this from your switch(job.name)
+  private async processOcaReport(job: Job) {
+    const filePath = job.data.path;
+    const batchSize = 1000;
+    let rowsToInsert: any[] = [];
+
+    // Create a stream that pipes the file through the CSV parser
+    const stream = fs.createReadStream(filePath).pipe(csv({
+      mapHeaders: ({ header }) => header.trim() // Safely trim whitespace/BOM from headers
+    }));
+
+    // Async Iterator: This reads the CSV line by line without loading it all into RAM
+    for await (const row of stream) {
+      
+      const rowData = {
+        // We use the EXACT header string from your CSV file
+        ticketNumber:    row['Ticket Number'],
+        ticketSubject:   row['Ticket Subject'],
+        channel:         row['Channel'],
+        category:        row['Category'],
+        reporter:        row['Reporter'],
+        assignee:        row['Assignee'],
+        department:      row['Department'],
+        priority:        row['Priority'],
+        lastStatus:      row['Last Status'],
+        
+        // Date Parsing
+        ticketCreated:   this.parseExcelDate(row['Ticket Created']),
+        lastUpdate:      this.parseExcelDate(row['Last Update']),
+        
+        description:     row['Description'],
+        customerName:    row['Customer Name'],
+        customerPhone:   row['Customer Phone'],
+        customerAddress: row['Customer Address'],
+        customerEmail:   row['Customer Email'],
+        
+        firstResponseTime:   this.parseExcelDate(row['First Response Time']),
+        totalResponseTime:   row['Total Response Time'],
+        totalResolutionTime: row['Total Resolution Time'],
+        resolveTime:         this.parseExcelDate(row['Resolve Time']),
+        resolvedBy:          row['Resolved By'],
+        closedTime:          this.parseExcelDate(row['Closed Time']),
+        ticketDuration:      row['Ticket Duration'],
+        
+        // Number Parsing
+        countInboundMessage: this.parseSafeInt(row['Count Inbound Message']),
+        labelInRoom:         row['Label In Room'],
+        firstResponseDuration: row['First Response Duration'],
+        
+        escalateTicket:        row['Escalate Ticket'],
+        lastAssigneeEscalation: row['Last Assignee Escalation'],
+        lastStatusEscalation:   row['Last Status Escalation'],
+        lastUpdateEscalation:   row['Last Update Escalation'],
+        
+        converse:           row['Converse'],
+        moveToOtherChannel: row['Move to other channel'],
+        previousChannel:    row['Previous channel'],
+        
+        amountRevenue: this.parseSafeBigInt(row['Amount Revenue']),
+        jumlahMsisdn:  row['Jumlah MSISDN'],
+        
+        tags:          row['Tags'],
+        idRemedyNo:    row['ID Remedy_NO'],
+        eskalasiId:    row['Eskalasi/ID Remedy_IT/AO/EMS'], // Specific complex header
+        reasonOsl:     row['Reason OSL'],
+        projectId:     row['Project ID'],
+        namaPerusahaan: row['Nama Perusahaan'],
+        roaming:       row['Roaming'],
+        subCategory:   row['Sub Category'],
+        detailCategory: row['Detail Category'],
+        iot:           row['IOT'],
+        updatedAtExcel: this.parseExcelDate(row['Updated at'])
+      };
+
+      rowsToInsert.push(rowData);
+
+      // If batch is full, pause stream, save to DB, then resume
+      if (rowsToInsert.length >= batchSize) {
+        await this.saveOcaBatch(rowsToInsert);
+        rowsToInsert = [];
+      }
+    }
+
+    // Save remaining rows
+    if (rowsToInsert.length > 0) {
+      await this.saveOcaBatch(rowsToInsert);
+    }
+
+    return { status: 'CSV Ticket Report Completed' };
+  }
+
+private async saveOcaBatch(rows: any[]) {
+    if (rows.length === 0) return;
+
+    // 1. DEDUPLICATE IN MEMORY
+    const uniqueRowsMap = new Map<string, any>();
+    for (const row of rows) {
+      if (!row.ticketNumber) continue;
+      uniqueRowsMap.set(row.ticketNumber, row); 
+    }
+
+    const cleanRows = Array.from(uniqueRowsMap.values());
+    if (cleanRows.length === 0) return;
+
+    // 2. BUILD SQL VALUES (Order must match INSERT columns below)
+    const values = cleanRows.map((row) => {
+      return `(
+        ${this.formatSqlValue(row.ticketNumber)},
+        ${this.formatSqlValue(row.ticketSubject)},
+        ${this.formatSqlValue(row.channel)},
+        ${this.formatSqlValue(row.category)},
+        ${this.formatSqlValue(row.reporter)},
+        ${this.formatSqlValue(row.assignee)},
+        ${this.formatSqlValue(row.department)},
+        ${this.formatSqlValue(row.priority)},
+        ${this.formatSqlValue(row.lastStatus)},
+        ${this.formatSqlValue(row.ticketCreated)},
+        ${this.formatSqlValue(row.lastUpdate)},
+        ${this.formatSqlValue(row.description)},
+        ${this.formatSqlValue(row.customerName)},
+        ${this.formatSqlValue(row.customerPhone)},
+        ${this.formatSqlValue(row.customerAddress)},
+        ${this.formatSqlValue(row.customerEmail)},
+        ${this.formatSqlValue(row.firstResponseTime)},
+        ${this.formatSqlValue(row.totalResponseTime)},
+        ${this.formatSqlValue(row.totalResolutionTime)},
+        ${this.formatSqlValue(row.resolveTime)},
+        ${this.formatSqlValue(row.resolvedBy)},
+        ${this.formatSqlValue(row.closedTime)},
+        ${this.formatSqlValue(row.ticketDuration)},
+        ${this.formatSqlValue(row.countInboundMessage)},
+        ${this.formatSqlValue(row.labelInRoom)},
+        ${this.formatSqlValue(row.firstResponseDuration)},
+        ${this.formatSqlValue(row.escalateTicket)},
+        ${this.formatSqlValue(row.lastAssigneeEscalation)},
+        ${this.formatSqlValue(row.lastStatusEscalation)},
+        ${this.formatSqlValue(row.lastUpdateEscalation)},
+        ${this.formatSqlValue(row.converse)},
+        ${this.formatSqlValue(row.moveToOtherChannel)},
+        ${this.formatSqlValue(row.previousChannel)},
+        ${this.formatSqlValue(row.amountRevenue)},
+        ${this.formatSqlValue(row.jumlahMsisdn)},
+        ${this.formatSqlValue(row.tags)},
+        ${this.formatSqlValue(row.idRemedyNo)},
+        ${this.formatSqlValue(row.eskalasiId)},
+        ${this.formatSqlValue(row.reasonOsl)},
+        ${this.formatSqlValue(row.projectId)},
+        ${this.formatSqlValue(row.namaPerusahaan)},
+        ${this.formatSqlValue(row.roaming)},
+        ${this.formatSqlValue(row.subCategory)},
+        ${this.formatSqlValue(row.detailCategory)},
+        ${this.formatSqlValue(row.iot)},
+        ${this.formatSqlValue(row.updatedAtExcel)}
+      )`;
+    }).join(',');
+
+    // 3. EXECUTE QUERY with SNAKE_CASE columns
+    const query = `
+      INSERT INTO "RawOca" (
+        "ticket_number", "ticket_subject", "channel", "category", 
+        "reporter", "assignee", "department", "priority", "last_status",
+        "ticket_created", "last_update", "description", 
+        "customer_name", "customer_phone", "customer_address", "customer_email",
+        "first_response_time", "total_response_time", "total_resolution_time",
+        "resolve_time", "resolved_by", "closed_time", "ticket_duration",
+        "count_inbound_message", "label_in_room", "first_response_duration",
+        "escalate_ticket", "last_assignee_escalation", "last_status_escalation",
+        "last_update_escalation", "converse", "move_to_other_channel", "previous_channel",
+        "amount_revenue", "jumlah_msisdn", "tags", "id_remedy_no",
+        "eskalasi_id_remedy_it_ao_ems", "reason_osl", "project_id", "nama_perusahaan",
+        "roaming", "sub_category", "detail_category", "iot", "updated_at_excel"
+      )
+      VALUES ${values}
+      ON CONFLICT ("ticket_number")
+      DO UPDATE SET
+        "ticket_subject" = EXCLUDED."ticket_subject",
+        "channel"        = EXCLUDED."channel",
+        "category"       = EXCLUDED."category",
+        "assignee"       = EXCLUDED."assignee",
+        "last_status"    = EXCLUDED."last_status",
+        "last_update"    = EXCLUDED."last_update",
+        "description"    = EXCLUDED."description",
+        "resolved_by"    = EXCLUDED."resolved_by",
+        "closed_time"    = EXCLUDED."closed_time",
+        "updated_at_excel" = EXCLUDED."updated_at_excel";
+    `;
+
+    await this.prisma.$executeRawUnsafe(query);
   }
 
   // Call this from your main process() switch case
@@ -775,4 +969,44 @@ export class ExcelProcessor extends WorkerHost {
 
       return null;
   }
+
+  // --- HELPER: Parse Int/Float safely ---
+  private parseNumber(value: any): number | null {
+    if (!value) return null;
+    // Remove "Rp", ",", etc if necessary, but usually simple parseInt works
+    const num = Number(value);
+    return isNaN(num) ? null : num;
+  }
+
+  // Helper for Big Integers (Revenue)
+  // Turns "13513500000", "-", "~" into BigInt or Null
+  private parseSafeBigInt(value: any): BigInt | null {
+    if (!value) return null;
+    let str = value.toString().trim();
+    
+    // Clean garbage characters
+    if (str === '-' || str === '~' || str === '') return null;
+    
+    // Remove non-numeric chars (keep digits and minus sign)
+    str = str.replace(/[^0-9-]/g, '');
+    
+    try {
+      return BigInt(str);
+    } catch {
+      return null;
+    }
+  }
+
+  // Helper for Standard Integers (Counts)
+  // Turns "30", "-", "~" into Number or Null
+  private parseSafeInt(value: any): number | null {
+    if (!value) return null;
+    let str = value.toString().trim();
+    
+    if (str === '-' || str === '~' || str === '') return null;
+    
+    const num = parseInt(str);
+    return isNaN(num) ? null : num;
+  }
+
 }
