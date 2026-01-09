@@ -23,6 +23,7 @@ export class CsatUploadService {
 
     const batchSize = 1000;
     let rowsToInsert: any[] = [];
+    const affectedDates = new Set<string>();
 
     // 1. Stream the Excel file
     const workbook = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {});
@@ -37,12 +38,16 @@ export class CsatUploadService {
         const answeredAtRaw = row.getCell(4).value;
         const scoreRaw = row.getCell(9).value; // "Numeric" column
 
+        if (createdAtRaw) {
+            affectedDates.add(ExcelUtils.parseExcelDate(createdAtRaw).toISOString().split('T')[0]);
+        }
+
         const rowData = {
           // id: this.extractFirstId(row.getCell(7).text),
           createdAt: ExcelUtils.parseExcelDate(createdAtRaw), 
           status: row.getCell(3).text,
           // Only parse answeredAt if it exists
-          answeredAt: answeredAtRaw ? new Date(answeredAtRaw as string) : null,
+          answeredAt: answeredAtRaw ? ExcelUtils.parseExcelDate(answeredAtRaw) : null,
           customer: row.getCell(5).text,
           ticketNumbers: row.getCell(6).text,
           interactionId: row.getCell(7).text,
@@ -71,8 +76,10 @@ export class CsatUploadService {
       await this.saveBatch(rowsToInsert);
     }
 
+    const uniqueDates = Array.from(affectedDates).map(d => new Date(d));
+
     // 2. RUN SUMMARIZATION
-    await this.refreshDailyStats();
+    await this.refreshDailyStats(uniqueDates);
     
     return { status: 'Completed' };
   }
@@ -170,55 +177,117 @@ export class CsatUploadService {
     await this.prisma.$executeRawUnsafe(query);
   }
 
-  private async refreshDailyStats() {
-    // This SQL creates your exact JSON requirements
-    await this.prisma.$executeRaw`
-      INSERT INTO "DailyCsatStat" (
-        "date", 
-        "totalSurvey", 
-        "totalDijawab", 
-        "totalJawaban45", 
-        "scoreCsat", 
-        "persenCsat"
-      )
-      WITH DailyAggregates AS (
-        SELECT 
-          DATE("createdAt") as date,
-          COUNT(*) as totalSurvey,
-          COUNT(CASE WHEN "answeredAt" IS NOT NULL THEN 1 END) as totalDijawab,
-          COUNT(CASE WHEN "numeric" >= 4 THEN 1 END) as totalJawaban45
-        FROM "RawCsat"
-        GROUP BY DATE("createdAt")
-      ),
-      WithPercentage AS (
-        SELECT 
-          *,
-          CASE 
-            WHEN totalDijawab = 0 THEN 0
-            ELSE (CAST(totalJawaban45 AS FLOAT) / CAST(totalDijawab AS FLOAT)) * 100
-          END as calculated_persen
-        FROM DailyAggregates
-      )
-      SELECT 
-        date,
-        totalSurvey,
-        totalDijawab,
-        totalJawaban45,
-        
-        -- 1. Calculate Score from Percentage * 5
-        ((calculated_persen/100) * 5) as scoreCsat,
-        
-        -- 2. The Percentage itself
-        calculated_persen as persenCsat
+  private async refreshDailyStats(targetDates: Date[]) {
+    if (targetDates.length === 0) return;
 
-      FROM WithPercentage
-      ON CONFLICT ("date") 
-      DO UPDATE SET 
-        "totalSurvey" = EXCLUDED."totalSurvey",
-        "totalDijawab" = EXCLUDED."totalDijawab",
-        "totalJawaban45" = EXCLUDED."totalJawaban45",
-        "scoreCsat" = EXCLUDED."scoreCsat",
-        "persenCsat" = EXCLUDED."persenCsat";
+    // Convert dates to string format 'YYYY-MM-DD' for the SQL query
+    // Example: "'2025-01-01', '2025-01-02'"
+    const dateStrings = targetDates
+        .map(d => `'${d.toISOString().split('T')[0]}'`)
+        .join(', ');
+        
+    const query = `
+        INSERT INTO "DailyCsatStat" (
+            "date", 
+            "totalSurvey", 
+            "totalDijawab", 
+            "totalJawaban45", 
+            "scoreCsat", 
+            "persenCsat"
+        )
+        WITH DailyAggregates AS (
+        SELECT 
+            DATE("createdAt") as date,
+            COUNT(*) as totalSurvey,
+            COUNT(CASE WHEN "answeredAt" IS NOT NULL THEN 1 END) as totalDijawab,
+            COUNT(CASE WHEN "numeric" >= 4 THEN 1 END) as totalJawaban45
+        FROM "RawCsat"
+        
+        -- Only look at the dates we just inserted/updated
+        WHERE DATE("createdAt") IN (${dateStrings}) 
+        
+        GROUP BY DATE("createdAt")
+        ),
+        WithPercentage AS (
+            SELECT 
+            *,
+            CASE 
+                WHEN totalDijawab = 0 THEN 0
+                ELSE (CAST(totalJawaban45 AS FLOAT) / CAST(totalDijawab AS FLOAT)) * 100
+            END as calculated_persen
+            FROM DailyAggregates
+        )
+        SELECT 
+            date,
+            totalSurvey,
+            totalDijawab,
+            totalJawaban45,
+            
+            -- 1. Calculate Score from Percentage * 5
+            ((calculated_persen/100) * 5) as scoreCsat,
+            
+            -- 2. The Percentage itself
+            calculated_persen as persenCsat
+
+        FROM WithPercentage
+        ON CONFLICT ("date") 
+        DO UPDATE SET 
+            "totalSurvey" = EXCLUDED."totalSurvey",
+            "totalDijawab" = EXCLUDED."totalDijawab",
+            "totalJawaban45" = EXCLUDED."totalJawaban45",
+            "scoreCsat" = EXCLUDED."scoreCsat",
+            "persenCsat" = EXCLUDED."persenCsat";
     `;
+
+    await this.prisma.$executeRawUnsafe(query);
+
+    // await this.prisma.$executeRaw`
+    //   INSERT INTO "DailyCsatStat" (
+    //     "date", 
+    //     "totalSurvey", 
+    //     "totalDijawab", 
+    //     "totalJawaban45", 
+    //     "scoreCsat", 
+    //     "persenCsat"
+    //   )
+    //   WITH DailyAggregates AS (
+    //     SELECT 
+    //       DATE("createdAt") as date,
+    //       COUNT(*) as totalSurvey,
+    //       COUNT(CASE WHEN "answeredAt" IS NOT NULL THEN 1 END) as totalDijawab,
+    //       COUNT(CASE WHEN "numeric" >= 4 THEN 1 END) as totalJawaban45
+    //     FROM "RawCsat"
+    //     GROUP BY DATE("createdAt")
+    //   ),
+    //   WithPercentage AS (
+    //     SELECT 
+    //       *,
+    //       CASE 
+    //         WHEN totalDijawab = 0 THEN 0
+    //         ELSE (CAST(totalJawaban45 AS FLOAT) / CAST(totalDijawab AS FLOAT)) * 100
+    //       END as calculated_persen
+    //     FROM DailyAggregates
+    //   )
+    //   SELECT 
+    //     date,
+    //     totalSurvey,
+    //     totalDijawab,
+    //     totalJawaban45,
+        
+    //     -- 1. Calculate Score from Percentage * 5
+    //     ((calculated_persen/100) * 5) as scoreCsat,
+        
+    //     -- 2. The Percentage itself
+    //     calculated_persen as persenCsat
+
+    //   FROM WithPercentage
+    //   ON CONFLICT ("date") 
+    //   DO UPDATE SET 
+    //     "totalSurvey" = EXCLUDED."totalSurvey",
+    //     "totalDijawab" = EXCLUDED."totalDijawab",
+    //     "totalJawaban45" = EXCLUDED."totalJawaban45",
+    //     "scoreCsat" = EXCLUDED."scoreCsat",
+    //     "persenCsat" = EXCLUDED."persenCsat";
+    // `;
   }
 }
