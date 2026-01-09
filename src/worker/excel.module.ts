@@ -4,6 +4,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { UploadController } from '../upload/upload.controller';
 import { ExcelProcessor } from './excel.processor';
 import { PrismaService } from '../../prisma/prisma.service'; // Assuming you have this
+import { CallUploadService } from './services/call-upload.service';
+import { CsatUploadService } from './services/csat-upload.service';
+import { OcaUploadService } from './services/oca-upload.service';
+import { OmnixUploadService } from './services/omnix-upload.service';
 
 @Module({
   imports: [
@@ -15,6 +19,10 @@ import { PrismaService } from '../../prisma/prisma.service'; // Assuming you hav
   controllers: [UploadController],
   providers: [
     ExcelProcessor, 
+    CallUploadService,
+    CsatUploadService,
+    OcaUploadService,
+    OmnixUploadService,
     PrismaService,
   ],
   exports: [BullModule], 

@@ -3,7 +3,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { diskStorage } from 'multer';
-import path from 'path';
 
 @Controller('upload')
 export class UploadController {
@@ -15,13 +14,13 @@ export class UploadController {
   }))
   async uploadExcel(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
-    await this.excelQueue.add('process-csat-report', {
+    const job = await this.excelQueue.add('process-csat-report', {
       path: file.path,
       filename: file.originalname,
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'File received. Processing started.', jobId: file.filename };
+    return { message: 'File CSAT report received. Processing started.', jobId: job.id };
   }
 
   @Post('omnix-report')
@@ -30,13 +29,13 @@ export class UploadController {
   }))
   async uploadOmnixReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
-    await this.excelQueue.add('process-omnix-report', {
+    const job = await this.excelQueue.add('process-omnix-report', {
       path: file.path,
       filename: file.originalname,
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'Omnix report received. Processing started.', jobId: file.filename };
+    return { message: 'File Omnix report received. Processing started.', jobId: job.id };
   }
 
   @Post('call-report')
@@ -45,13 +44,13 @@ export class UploadController {
   }))
   async uploadCallReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
-    await this.excelQueue.add('process-call-report', {
+    const job = await this.excelQueue.add('process-call-report', {
       path: file.path,
       filename: file.originalname,
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'Call report received. Processing started.', jobId: file.filename };
+    return { message: 'File Call report received. Processing started.', jobId: job.id, filename: file.filename };
   }
 
   @Post('oca-report')
@@ -60,13 +59,13 @@ export class UploadController {
   }))
   async uploadOcaReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
-    await this.excelQueue.add('process-oca-report', {
+    const job = await this.excelQueue.add('process-oca-report', {
       path: file.path,
       filename: file.originalname,
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'OCA report received. Processing started.', jobId: file.filename };
+    return { message: 'File OCA report received. Processing started.', jobId: job.id };
   }
 
 
