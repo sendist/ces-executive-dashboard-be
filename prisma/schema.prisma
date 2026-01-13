@@ -262,7 +262,44 @@ model RawOca {
   iot            String? @map("iot")
   updatedAtExcel DateTime? @map("updated_at_excel") // Was "Updated at"
 
+  // row tambahan 
+  validationStatus  String?
+  statusTiket       Boolean?
+  product           String?
+  sla               String?
+  fcr               String?
+  eskalasi          String?
+  isVip             Boolean?
+  isPareto          Boolean?
+
   @@index([ticketNumber])
   @@index([ticketCreated])
   @@index([lastUpdate])
+}
+
+model KIP {
+  id              Int     @id @default(autoincrement())
+  category        String?
+  subCategory     String?
+  detailCategory  String?
+  product         String?
+  subProduct      String?
+
+  @@index([subCategory])
+  @@index([product])  
+}
+
+model AccountMapping {
+  id                  Int     @id @default(autoincrement())
+  b2b_account_id      String  @unique
+  corporateName       String?
+  kategoriAccount     String?
+  group               String?
+  divisi              String?
+  department          String?
+  mppCodeNew          String?
+  namaAM              String?
+
+  @@index([corporateName])
+  @@index([kategoriAccount])
 }
