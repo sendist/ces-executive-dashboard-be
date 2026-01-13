@@ -164,6 +164,17 @@ model RawOmnix {
   customerInstagramId String? @map("customer_instagram_id")
   customerPhone      String? @map("customer_phone")
   customerFacebookId String? @map("customer_facebook_id") 
+
+    // row tambahan 
+  validationStatus  String?
+  statusTiket       Boolean?
+  product           String?
+  inSla             Boolean?
+  isFcr             Boolean?
+  eskalasi          String?
+  isVip             Boolean?
+  isPareto          Boolean?
+
 }
 
 model RawCall {

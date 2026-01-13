@@ -67,6 +67,22 @@ export const TICKET_RULES = [
   },
 ];
 
+export const TICKET_RULES_OMNIX = [
+  {
+    status: 'Double',
+    column: 'feedback',
+    // Pre-compiled Regex for speed
+    regex: createRegex('spam / out of topic / double ticket / dobel ticket / double tiket / dobel tiket / balikan ems / balasan ems'),
+    check: function(val: string) { return this.regex.test(val || ''); }
+  },
+  {
+    status: 'Double',
+    column: 'subCategory',
+    regex: createRegex('Out Of Topic / Interaksi terputus / Pelanggan iseng'),
+    check: function(val: string) { return this.regex.test(val || ''); }
+  },
+];
+
 
 // Config constants for readability (and easy changing later)
 const SLA_LIMITS = {
@@ -74,7 +90,7 @@ const SLA_LIMITS = {
   SOLUTION: 6 * 60 * 60 * 1000,     // 6 Hours in ms
 };
 
-export function calculateSlaStatus(row: any): string {
+export function calculateSlaStatus(row: any): boolean {
   // 1. Extract raw values (Map to your Excel columns)
   const type = row['product'] || ''; // e.g., 'Connectivity' or 'Solution'
   const createdStr = row['ticketCreated'];  // Created Time
@@ -85,7 +101,8 @@ export function calculateSlaStatus(row: any): string {
   if (!resolutionStr || resolutionStr === '-') {
     // Technical choice: Do you want 'IN SLA' (because 0 < 3h) or 'OPEN'?
     // Based on your Excel formula returning "00:00", it implies IN SLA.
-    return 'IN SLA'; 
+    // return 'IN SLA';
+    return true; 
   }
 
   // 3. Parse Dates
@@ -95,7 +112,8 @@ export function calculateSlaStatus(row: any): string {
 
   // Safety check: If date parsing fails, mark as Error or Default
   if (!isValid(createdDate) || !isValid(resolutionDate)) {
-    return 'DATE ERROR'; 
+    // return 'DATE ERROR';
+    return false; 
   }
 
   // 4. Calculate Duration
@@ -104,21 +122,24 @@ export function calculateSlaStatus(row: any): string {
   // 5. Apply Business Logic
   // CASE A: Connectivity (Limit: 3 Hours)
   if (type.toLowerCase() === 'connectivity') {
-    return durationMs <= SLA_LIMITS.CONNECTIVITY ? 'IN SLA' : 'OUT OF SLA';
+    // return durationMs <= SLA_LIMITS.CONNECTIVITY ? 'IN SLA' : 'OUT OF SLA';
+    return durationMs <= SLA_LIMITS.CONNECTIVITY ? true : false;
+
   }
 
   // CASE B: Solution (Limit: 6 Hours)
   if (type.toLowerCase() === 'solution') {
-    return durationMs <= SLA_LIMITS.SOLUTION ? 'IN SLA' : 'OUT OF SLA';
+    return durationMs <= SLA_LIMITS.SOLUTION ? true : false;
   }
 
   // Default Fallback (if type is neither)
-  return 'OUT OF SLA';
+  // return 'OUT OF SLA';
+  return false;
 }
 
 // rules.constant.ts
 
-export function calculateFcrStatus(row: any): string {
+export function calculateFcrStatus(row: any): boolean {
   // 1. Map columns safely (Trim strings to ensure " " isn't counted as value)
   const idRemedy = (row['ID Remedy_NO'] || '').toString().trim();
   const eskalasiId = (row['Eskalasi/ID Remedy_IT/AO/EMS'] || '').toString().trim();
@@ -135,12 +156,14 @@ export function calculateFcrStatus(row: any): string {
   // 4. Apply FCR Logic
   // Rule: ID & Eskalasi MUST be empty AND MSISDN < 10
   if (isIdRemedyEmpty && isEskalasiEmpty && msisdnCount < 10) {
-    return 'FCR';
+    // return 'FCR';
+    return true;
   }
 
   // 5. Default Fallback (NON FCR)
   // This covers the inverse: ID is present OR Eskalasi is present OR MSISDN >= 10
-  return 'NON FCR';
+  // return 'NON FCR';
+  return false;
 }
 
 // rules.constant.ts

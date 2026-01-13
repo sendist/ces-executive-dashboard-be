@@ -4,6 +4,8 @@ import { PrismaService } from "prisma/prisma.service";
 import * as ExcelJS from 'exceljs';
 import { ExcelUtils } from "../excel-utils.helper";
 import * as fs from 'fs';
+import { calculateFcrStatus, calculateSlaStatus, determineEskalasi, TICKET_RULES, TICKET_RULES_OMNIX } from "../utils/rules.constant";
+
 
 @Injectable()
 export class OmnixUploadService {
@@ -11,7 +13,23 @@ export class OmnixUploadService {
       private readonly prisma: PrismaService,
   ){}
 
+  // regex to identify VIP keywords
+  private readonly vipRegex = /vvip|vip|direk|director|komisaris/i;
+
   async process(job: Job<any, any, string>): Promise<any> {
+
+    const kipMap = await this.createLookupMap(
+      this.prisma.kIP,
+      'subCategory',
+      'product'
+    );
+
+    const accountMap = await this.createLookupMap(
+      this.prisma.accountMapping,
+      'corporateName',
+      'kategoriAccount',
+    );
+
    const filePath = job.data.path;
    if (!fs.existsSync(filePath)) {
     console.error(`File missing at path: ${filePath}`);
@@ -29,6 +47,44 @@ export class OmnixUploadService {
     for await (const worksheet of workbook) {
       for await (const row of worksheet) {
         if (row.number === 1) continue; // Skip Header
+
+          const classification = this.classifyTicket(row);
+    
+          const rawCategory = row['category'];
+          const normalizedSubCategory =
+            typeof rawCategory === 'string'
+              ? rawCategory.trim().toLowerCase()
+              : '';
+          const derivedProduct = kipMap.get(normalizedSubCategory || '');
+    
+          const rawNamaPerusahaan = row['nama_perusahaan'];
+          const normalizedNamaPerusahaan =
+            typeof rawNamaPerusahaan === 'string'
+              ? rawNamaPerusahaan.trim().toLowerCase()
+              : '';
+          const derivedAccountCategory = accountMap.get(normalizedNamaPerusahaan || '');
+    
+          const ticketSubject = row['subject'] || '';
+          const isVip = this.vipRegex.test(ticketSubject);
+          
+          // --- 2. RUN SLA CALCULATION ---
+          // Now we pass the 'derivedProduct' as 'Kolom BF'
+          const slaStatus = calculateSlaStatus({
+              'product': derivedProduct, 
+              'ticketCreated': row['ticket_created'],
+              'resolveTime': row['resolve_time']
+          });
+    
+          const fcrStatus = calculateFcrStatus({
+            'ID Remedy_NO': row['id_remedy_no'],
+            'Eskalasi/ID Remedy_IT/AO/EMS': row['eskalasi_id_remedy_it_ao_ems'],
+            'Jumlah MSISDN': row['jumlah_msisdn']
+          });
+    
+          const typeEskalasi = determineEskalasi({
+            'ID Remedy_NO': row['id_remedy_no'], 
+            'Eskalasi/ID Remedy_IT/AO/EMS': row['eskalasi_id_remedy_it_ao_ems']
+          })
 
         // SAFE PARSING LOGIC
         // Handle empty dates or invalid scores gracefully
@@ -168,6 +224,16 @@ export class OmnixUploadService {
           customerInstagramId: row.getCell(87).text,
           customerPhone:       row.getCell(88).text,
           customerFacebookId:  row.getCell(89).text,
+          
+          // row tambahan
+          validationStatus: classification.status,
+          statusTiket:      classification.isValid,
+          product:          derivedProduct,
+          inSla:            slaStatus,
+          isFcr:            fcrStatus,
+          eskalasi:         typeEskalasi,
+          isPareto:         derivedAccountCategory === 'P1' ? true : false,
+          isVip:            isVip,
         };
 
         rowsToInsert.push(rowData);
@@ -309,7 +375,15 @@ export class OmnixUploadService {
         ${ExcelUtils.formatSqlValue(row.approvalBillco)},
         ${ExcelUtils.formatSqlValue(row.customerInstagramId)},
         ${ExcelUtils.formatSqlValue(row.customerPhone)},
-        ${ExcelUtils.formatSqlValue(row.customerFacebookId)}
+        ${ExcelUtils.formatSqlValue(row.customerFacebookId)},
+        ${ExcelUtils.formatSqlValue(row.validationStatus)},
+        ${ExcelUtils.formatSqlValue(row.statusTiket)},
+        ${ExcelUtils.formatSqlValue(row.product)},
+        ${ExcelUtils.formatSqlValue(row.inSla)},
+        ${ExcelUtils.formatSqlValue(row.isFcr)},
+        ${ExcelUtils.formatSqlValue(row.eskalasi)},
+        ${ExcelUtils.formatSqlValue(row.isVip)},
+        ${ExcelUtils.formatSqlValue(row.isPareto)}
       )`;
     }).join(',');
 
@@ -339,7 +413,8 @@ export class OmnixUploadService {
         "date_pending", "date_resolve", 
         "date_eskalasi ebo", "date_eskalasi it", "date_eskalasi no", "date_eskalasi",
         "partner", "date_menunggu", "approval billco",
-        "customer_instagram_id", "customer_phone", "customer_facebook_id"
+        "customer_instagram_id", "customer_phone", "customer_facebook_id",
+        "validationStatus", "statusTiket", "product","inSla", "isFcr", "eskalasi", "isVip", "isPareto"
       )
       VALUES ${values}
       ON CONFLICT ("ticket_id") 
@@ -363,4 +438,65 @@ export class OmnixUploadService {
     await this.prisma.$executeRawUnsafe(query);
   }
 
+  private classifyTicket(row: any) {
+    // 1. Iterate through defined rules
+    for (const rule of TICKET_RULES_OMNIX) {
+        // Get value safely (handle casing if needed)
+        const cellValue = row[rule.column]; 
+        
+        // If rule matches, return that status immediately (Fail-Fast)
+        if (cellValue && rule.check(cellValue)) {
+            return { 
+                status: rule.status, 
+                isValid: false, // It hit a "Double/EMS/RPA" rule
+                reason: `Matched ${rule.status} rule on ${rule.column}` 
+            };
+        }
+    }
+
+    // 2. Special Case: The "Valid" Description override from your image
+    // If the image implies "completed by hia" overrides others, put this BEFORE the loop.
+    // If it implies "it's valid if it contains this", we handle it here as a fallback.
+    // if (row['description'] && /completed by hia/i.test(row['description'])) {
+    //      return { status: 'Valid', isValid: true, reason: 'Completed by HIA' };
+    // }
+
+    // 3. Default Fallback (Row 11 in your image)
+    return { status: 'Valid', isValid: true, reason: 'Passed all checks' };
+  }
+
+  /**
+   * Generic helper to fetch reference data and create a normalized Map
+   * @param modelDelegate The prisma model (e.g. this.prisma.kIP)
+   * @param keyField The database column to be used as the Map Key (normalized)
+   * @param valueField The database column to be used as the Map Value
+   */
+  private async createLookupMap(
+    modelDelegate: any, 
+    keyField: string, 
+    valueField: string
+  ): Promise<Map<string, string>> {
+    // 1. Dynamic Select: Fetch only the columns we need
+    const data = await modelDelegate.findMany({
+      select: {
+        [keyField]: true,
+        [valueField]: true,
+      },
+    });
+
+    // 2. Build Map with normalization
+    const lookupMap = new Map<string, string>();
+
+    for (const row of data) {
+      const rawKey = row[keyField];
+      const value = row[valueField];
+
+      // Ensure key exists and is a string before processing
+      if (rawKey && typeof rawKey === 'string') {
+        lookupMap.set(rawKey.trim().toLowerCase(), value || '');
+      }
+    }
+
+    return lookupMap;
+  }
 }
