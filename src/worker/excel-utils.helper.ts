@@ -1,7 +1,16 @@
 export class ExcelUtils {
     static parseExcelDate(value) {
       if (!value) return null;
-
+// --- NEW: Pre-processing for String Numbers (e.g., "46006,7186") ---
+    // If it's a string that looks like a number (allows both . and , as decimals)
+    if (typeof value === 'string') {
+        const normalized = value.replace(',', '.');
+        // Check if it is a valid number and NOT a date string like "01/01/2025"
+        // (Date strings with slashes usually result in NaN when cast to Number directly)
+        if (!isNaN(Number(normalized)) && normalized.trim() !== '') {
+            value = Number(normalized);
+        }
+    }
       // CASE 1: Value is a Number (Excel Serial Date)
       // Example: 45658.25 is Jan 1, 2025
       if (typeof value === 'number') {

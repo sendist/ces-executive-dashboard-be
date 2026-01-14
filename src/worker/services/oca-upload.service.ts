@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "prisma/prisma.service";
 import { Job } from 'bullmq';
@@ -58,8 +60,11 @@ export class OcaUploadService {
     const batchSize = 1000;
     let rowsToInsert: any[] = [];
 
+    const separator = this.detectDelimiter(filePath);
+
     // Create a stream that pipes the file through the CSV parser
     const stream = fs.createReadStream(filePath).pipe(csv({
+      separator,
       mapHeaders: ({ header }) => header.trim() // Safely trim whitespace/BOM from headers
     }));
 
@@ -363,6 +368,20 @@ export class OcaUploadService {
     }
 
     return lookupMap;
+  }
+
+  detectDelimiter(filePath) {
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(1024); // enough to read header line
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+    fs.closeSync(fd);
+
+    const firstLine = buffer.toString('utf8').split('\n')[0];
+
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+
+    return semicolonCount > commaCount ? ';' : ',';
   }
 
 }
