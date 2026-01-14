@@ -2,12 +2,13 @@ import { Controller, Get, Query, ValidationPipe } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { DashboardFilterDto, PaginationDto } from './dto/dashboard-filter.dto';
 import { OcaService } from './oca.service';
+import { OcaOmnixService } from './oca-omnix.service';
 
 @Controller('dashboard')
 export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
-    private readonly ocaService: OcaService,
+    private readonly ocaService: OcaOmnixService,
   ) {}
 
 //   // Endpoint 1: Get the daily breakdown (for charts)

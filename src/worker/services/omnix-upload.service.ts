@@ -69,11 +69,11 @@ export class OmnixUploadService {
           
           // --- 2. RUN SLA CALCULATION ---
           // Now we pass the 'derivedProduct' as 'Kolom BF'
-          const slaStatus = calculateSlaStatus({
+          const slaStatus = classification.isValid ? calculateSlaStatus({
               'product': derivedProduct, 
               'ticketCreated': row.getCell(19).text,
               'resolveTime': row.getCell(21).text
-          });
+          }) : false;
     
           const fcrStatus = calculateFcrStatus({
             'ID Remedy_NO': row.getCell(71).text,
@@ -85,10 +85,6 @@ export class OmnixUploadService {
             'ID Remedy_NO': row.getCell(71).text, 
             'Eskalasi/ID Remedy_IT/AO/EMS': row.getCell(72).text
           })
-
-        //counter
-        // console.log(`Processing Row #: ${row.number}, create: ${row.getCell(19).text}, resolve: ${row.getCell(21).text}, product: ${derivedProduct}, inSla: ${slaStatus}`);
-        console.log(`Processing Row #: ${row.number}, classification: ${classification.status}, valid: ${classification.isValid},reason: ${classification.reason}`);
 
         // SAFE PARSING LOGIC
         // Handle empty dates or invalid scores gracefully
