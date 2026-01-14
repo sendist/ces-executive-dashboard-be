@@ -50,41 +50,45 @@ export class OmnixUploadService {
 
           const classification = this.classifyTicket(row);
     
-          const rawCategory = row['category'];
+          const rawCategory = row.getCell(36).text;
           const normalizedSubCategory =
             typeof rawCategory === 'string'
               ? rawCategory.trim().toLowerCase()
               : '';
           const derivedProduct = kipMap.get(normalizedSubCategory || '');
     
-          const rawNamaPerusahaan = row['nama_perusahaan'];
+          const rawNamaPerusahaan = row.getCell(69).text;
           const normalizedNamaPerusahaan =
             typeof rawNamaPerusahaan === 'string'
               ? rawNamaPerusahaan.trim().toLowerCase()
               : '';
           const derivedAccountCategory = accountMap.get(normalizedNamaPerusahaan || '');
     
-          const ticketSubject = row['subject'] || '';
+          const ticketSubject = row.getCell(3).text || '';
           const isVip = this.vipRegex.test(ticketSubject);
           
           // --- 2. RUN SLA CALCULATION ---
           // Now we pass the 'derivedProduct' as 'Kolom BF'
           const slaStatus = calculateSlaStatus({
               'product': derivedProduct, 
-              'ticketCreated': row['ticket_created'],
-              'resolveTime': row['resolve_time']
+              'ticketCreated': row.getCell(19).text,
+              'resolveTime': row.getCell(21).text
           });
     
           const fcrStatus = calculateFcrStatus({
-            'ID Remedy_NO': row['id_remedy_no'],
-            'Eskalasi/ID Remedy_IT/AO/EMS': row['eskalasi_id_remedy_it_ao_ems'],
+            'ID Remedy_NO': row.getCell(71).text,
+            'Eskalasi/ID Remedy_IT/AO/EMS': row.getCell(72).text,
             'Jumlah MSISDN': row['jumlah_msisdn']
           });
     
           const typeEskalasi = determineEskalasi({
-            'ID Remedy_NO': row['id_remedy_no'], 
-            'Eskalasi/ID Remedy_IT/AO/EMS': row['eskalasi_id_remedy_it_ao_ems']
+            'ID Remedy_NO': row.getCell(71).text, 
+            'Eskalasi/ID Remedy_IT/AO/EMS': row.getCell(72).text
           })
+
+        //counter
+        // console.log(`Processing Row #: ${row.number}, create: ${row.getCell(19).text}, resolve: ${row.getCell(21).text}, product: ${derivedProduct}, inSla: ${slaStatus}`);
+        console.log(`Processing Row #: ${row.number}, classification: ${classification.status}, valid: ${classification.isValid},reason: ${classification.reason}`);
 
         // SAFE PARSING LOGIC
         // Handle empty dates or invalid scores gracefully
@@ -442,7 +446,8 @@ export class OmnixUploadService {
     // 1. Iterate through defined rules
     for (const rule of TICKET_RULES_OMNIX) {
         // Get value safely (handle casing if needed)
-        const cellValue = row[rule.column]; 
+        // const cellValue = row[rule.column]; 
+        const cellValue = row.getCell(rule.column).text;
         
         // If rule matches, return that status immediately (Fail-Fast)
         if (cellValue && rule.check(cellValue)) {

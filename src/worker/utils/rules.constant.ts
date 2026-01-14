@@ -1,4 +1,5 @@
 import { parse, differenceInMilliseconds, isValid } from 'date-fns';
+import { ExcelUtils } from '../excel-utils.helper';
 
 
 // 1. Helper to turn "spam / out of topic / ..." into a fast Regex
@@ -70,14 +71,14 @@ export const TICKET_RULES = [
 export const TICKET_RULES_OMNIX = [
   {
     status: 'Double',
-    column: 'feedback',
+    column: 51,
     // Pre-compiled Regex for speed
     regex: createRegex('spam / out of topic / double ticket / dobel ticket / double tiket / dobel tiket / balikan ems / balasan ems'),
     check: function(val: string) { return this.regex.test(val || ''); }
   },
   {
     status: 'Double',
-    column: 'subCategory',
+    column: 37,
     regex: createRegex('Out Of Topic / Interaksi terputus / Pelanggan iseng'),
     check: function(val: string) { return this.regex.test(val || ''); }
   },
@@ -91,49 +92,42 @@ const SLA_LIMITS = {
 };
 
 export function calculateSlaStatus(row: any): boolean {
-  // 1. Extract raw values (Map to your Excel columns)
-  const type = row['product'] || ''; // e.g., 'Connectivity' or 'Solution'
-  const createdStr = row['ticketCreated'];  // Created Time
-  const resolutionStr = row['resolveTime']; // Resolution Time
+  // 1. Extract raw values
+  const type = row['product'] || ''; 
+  const createdRaw = row['ticketCreated']; 
+  const resolutionRaw = row['resolveTime'];
 
-  // 2. Handle "Blank" or "-" logic (from your Excel: IF(ISBLANK...))
-  // If resolution is missing, duration is effectively 0.
-  if (!resolutionStr || resolutionStr === '-') {
-    // Technical choice: Do you want 'IN SLA' (because 0 < 3h) or 'OPEN'?
-    // Based on your Excel formula returning "00:00", it implies IN SLA.
-    // return 'IN SLA';
-    return true; 
+  // 2. Handle "Blank" or "-" logic
+  // Check the raw value first
+  if (!resolutionRaw || resolutionRaw === '-') {
+    return true; // Implies IN SLA
   }
 
-  // 3. Parse Dates
-  // Adjust format string 'dd/MM/yyyy HH:mm:ss' based on your actual data
-  const createdDate = parse(createdStr, 'dd/MM/yyyy HH:mm:ss', new Date());
-  const resolutionDate = parse(resolutionStr, 'dd/MM/yyyy HH:mm:ss', new Date());
+  // 3. Parse Dates using your robust ExcelUtils
+  // converting whatever mess (Number/String/Date) into a valid JS Date
+  const createdDate = ExcelUtils.parseExcelDate(createdRaw);
+  const resolutionDate = ExcelUtils.parseExcelDate(resolutionRaw);
 
-  // Safety check: If date parsing fails, mark as Error or Default
-  if (!isValid(createdDate) || !isValid(resolutionDate)) {
-    // return 'DATE ERROR';
+  // Safety check: Ensure we actually got valid dates back
+  if (!createdDate || !resolutionDate || !isValid(createdDate) || !isValid(resolutionDate)) {
+    console.warn(`SLA Calculation Failed: Invalid Date. Created: ${createdRaw}, Res: ${resolutionRaw}`);
     return false; 
   }
 
-  // 4. Calculate Duration
+  // 4. Calculate Duration (Now safe because inputs are guaranteed Date objects)
   const durationMs = differenceInMilliseconds(resolutionDate, createdDate);
 
   // 5. Apply Business Logic
-  // CASE A: Connectivity (Limit: 3 Hours)
+  // CASE A: Connectivity (Limit: 3 Hours -> 10800000 ms)
   if (type.toLowerCase() === 'connectivity') {
-    // return durationMs <= SLA_LIMITS.CONNECTIVITY ? 'IN SLA' : 'OUT OF SLA';
-    return durationMs <= SLA_LIMITS.CONNECTIVITY ? true : false;
-
+    return durationMs <= 10800000; 
   }
 
-  // CASE B: Solution (Limit: 6 Hours)
+  // CASE B: Solution (Limit: 6 Hours -> 21600000 ms)
   if (type.toLowerCase() === 'solution') {
-    return durationMs <= SLA_LIMITS.SOLUTION ? true : false;
+     return durationMs <= 21600000;
   }
 
-  // Default Fallback (if type is neither)
-  // return 'OUT OF SLA';
   return false;
 }
 
