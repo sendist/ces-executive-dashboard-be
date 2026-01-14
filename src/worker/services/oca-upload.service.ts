@@ -17,25 +17,6 @@ export class OcaUploadService {
   private readonly vipRegex = /vvip|vip|direk|director|komisaris/i;
 
   async process(job: Job) {
-    // // 1. Fetch all reference data ONCE
-    // const allKipData = await this.prisma.kIP.findMany({
-    //   select: {
-    //     subCategory: true, // The "Join" Key
-    //     product: true      // The value you want (Connectivity/Solution)
-    //   }
-    // });
-
-    // // 2. Convert to a Map for O(1) lookup speed
-    // // We normalize to LowerCase to avoid "Internet" != "internet" errors
-    // const kipMap = new Map<string, string>();
-
-    // allKipData.forEach(row => {
-    //   if (row.subCategory) {
-    //     // console.log(`Mapping KIP: ${row.subCategory} -> ${row.product}`);
-    //     // Key: subCategory (normalized), Value: product
-    //     kipMap.set(row.subCategory.trim().toLowerCase(), row.product || '');
-    //   }
-    // });
 
     const kipMap = await this.createLookupMap(
       this.prisma.kIP,
@@ -285,7 +266,7 @@ export class OcaUploadService {
         "amount_revenue", "jumlah_msisdn", "tags", "id_remedy_no",
         "eskalasi_id_remedy_it_ao_ems", "reason_osl", "project_id", "nama_perusahaan",
         "roaming", "sub_category", "detail_category", "iot", "validationStatus", "statusTiket", "product",
-        "sla", "fcr", "eskalasi", "isVip", "isPareto", "updated_at_excel"
+        "inSla", "isFcr", "eskalasi", "isVip", "isPareto", "updated_at_excel"
       )
       VALUES ${values}
       ON CONFLICT ("ticket_number")
@@ -301,7 +282,7 @@ export class OcaUploadService {
         "closed_time"    = EXCLUDED."closed_time",
         "validationStatus" = EXCLUDED."validationStatus",
         "statusTiket"    = EXCLUDED."statusTiket",
-        "sla"            = EXCLUDED."sla",
+        "inSla"            = EXCLUDED."inSla",
         "updated_at_excel" = EXCLUDED."updated_at_excel";
     `;
 

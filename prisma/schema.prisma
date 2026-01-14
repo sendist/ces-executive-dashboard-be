@@ -277,8 +277,8 @@ model RawOca {
   validationStatus  String?
   statusTiket       Boolean?
   product           String?
-  sla               String?
-  fcr               String?
+  inSla             Boolean?
+  isFcr             Boolean?
   eskalasi          String?
   isVip             Boolean?
   isPareto          Boolean?
