@@ -185,6 +185,7 @@ export class OcaOmnixService {
   async getEscalationSummary(query: PaginationDto) {
     const { page, limit, search, startDate, endDate } = query;
     const skip = ((page? page : 1) - 1) * (limit? limit:10);
+    const limitVal = limit ? limit : 10;
 
     // 1. Aggregates for the header (EBO, GTM, etc.)
     const summary = await this.prisma.$queryRaw<any[]>`
@@ -221,15 +222,15 @@ export class OcaOmnixService {
                 department: true, // "unit id"
                 eskalasi: true
             },
-            skip,
-            take: limit,
+            skip: Number(skip),
+            take: Number(limitVal),
             orderBy: { ticketCreated: 'desc' }
         })
     ]);
 
     return { 
         summary, 
-        list: { data, total, page, limit } 
+        list: { data, total, page, limitVal } 
     };
   }
 
