@@ -124,7 +124,6 @@ export class OcaOmnixService {
 
     // Fetch "Top Corporate" and "Top KIP" separately because merging them into the GroupBy above is extremely expensive and complex
     // We will map them in code (application-side join)
-    console.log('Channel Stats Raw:', stats);
     const enhancedStats = await Promise.all(stats.map(async (stat) => {
         const topCorp = await this.getTopEntityForChannel(filter, stat.channel, 'nama_perusahaan', stat.source_origin);
         const topKip = await this.getTopEntityForChannel(filter, stat.channel, 'detail_category', stat.source_origin);

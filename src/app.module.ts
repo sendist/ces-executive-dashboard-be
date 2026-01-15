@@ -5,6 +5,7 @@ import { PrismaModule } from 'prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
 import { UploadModule } from './upload/upload.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -14,6 +15,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
         port: parseInt(process.env.REDIS_PORT || ''),
       },
     }),
+
+    AuthModule,
     
     PrismaModule,
     UploadModule,

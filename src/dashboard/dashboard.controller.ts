@@ -1,9 +1,12 @@
-import { Controller, Get, Query, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, ValidationPipe } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { DashboardFilterDto, PaginationDto } from './dto/dashboard-filter.dto';
 import { OcaService } from './oca.service';
 import { OcaOmnixService } from './oca-omnix.service';
+import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
 
+@UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class DashboardController {
   constructor(
