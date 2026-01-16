@@ -10,9 +10,15 @@ import { AuthModule } from './modules/auth/auth.module';
 @Module({
   imports: [
     BullModule.forRoot({
-      connection: {
+    connection: process.env.REDIS_URL
+    ? {
+        url: process.env.REDIS_URL,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      }
+    : {
         host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT || ''),
+        port: Number(process.env.REDIS_PORT),
       },
     }),
 
