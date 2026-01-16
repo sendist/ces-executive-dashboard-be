@@ -99,15 +99,15 @@ export class OcaOmnixService {
 
         -- Basic Counts
         COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "open",
-        COUNT(*) FILTER (WHERE "last_status" = 'Closed')::int as "closed",
+        COUNT(*) FILTER (WHERE "last_status" = 'Closed' OR "last_status" = 'Close')::int as "closed",
 
         -- Product Specifics
-        COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "product" = 'connectivity')::int as "connOpen",
-        COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "product" = 'solution')::int as "solOpen",
+        COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "product" = 'CONNECTIVITY')::int as "connOpen",
+        COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "product" = 'SOLUTION')::int as "solOpen",
         
         -- Resolve Time Logic
-        COUNT(*) FILTER (WHERE "product" = 'connectivity' AND ("resolve_time" - "ticket_created") > interval '3 hours')::int as "connOver3h",
-        COUNT(*) FILTER (WHERE "product" = 'solution' AND ("resolve_time" - "ticket_created") > interval '6 hours')::int as "solOver6h",
+        COUNT(*) FILTER (WHERE "product" = 'CONNECTIVITY' AND ("resolve_time" - "ticket_created") > interval '3 hours')::int as "connOver3h",
+        COUNT(*) FILTER (WHERE "product" = 'SOLUTION' AND ("resolve_time" - "ticket_created") > interval '6 hours')::int as "solOver6h",
 
         -- FCR Stats
         COUNT(*) FILTER (WHERE NOT "isFcr")::int as "nonFcrCount",
@@ -166,7 +166,7 @@ export class OcaOmnixService {
       // 2. RUN QUERY
       // We use ${channelColumn} in the WHERE clause instead of hardcoding "channel"
       const result = await this.prisma.$queryRawUnsafe<any[]>(`
-        SELECT ${metricColumn} as name, COUNT(*)::int as total
+        SELECT ${metricColumn} as name, COUNT(*)::int as total, COUNT(*) FILTER (WHERE "eskalasi" <> '')::int as ticket, ROUND((COUNT(*) FILTER (WHERE "isFcr")::decimal / COUNT(*)) * 100, 2) as "pctFcr"
         FROM ${tableName}
         WHERE ${channelColumn} = $1 
           AND ${dateColumn} BETWEEN $2::timestamp AND $3::timestamp
