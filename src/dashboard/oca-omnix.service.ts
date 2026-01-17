@@ -404,34 +404,61 @@ export class OcaOmnixService {
   // 6. PRODUCT BREAKDOWN (Connectivity, Solution, etc)
   // ---------------------------------------------------------
   async getProductBreakdown(filter: DashboardFilterDto) {
-    // 1. DEFINE CTE (Normalizes columns from both tables)
-    // Note: I mapped Omnix rows to 'SOLUTION' product by default based on previous turns.
-    // If Omnix has a 'product_type' column, change "'solution' as product" to that column.
+    // 1. DEFINE CTE (Added 'general_category' normalization)
     const unifiedCte = `
         WITH "UnifiedData" AS (
+            -- Table 1: RawOca
             SELECT 
-                "product", "last_status", "resolve_time", 
-                "ticket_created", "statusTiket", "inSla", "detail_category"
+                "product", 
+                "last_status", 
+                "resolve_time", 
+                "ticket_created", 
+                "statusTiket", 
+                "inSla", 
+                "detail_category",               -- Used for Top KIPs (existing)
+                "sub_category" as "general_category" -- NEW: Used for Top 5 Category
             FROM "RawOca"
             WHERE "ticket_created" BETWEEN $1::timestamp AND $2::timestamp
             
             UNION ALL
             
+            -- Table 2: RawOmnix
             SELECT 
-                "product",                 -- MAP: Hardcoded 'solution' or dynamic column
+                "product", 
                 "ticket_status_name" as "last_status", 
                 "date_close" as "resolve_time", 
                 "date_start_interaction" as "ticket_created", 
                 "statusTiket", 
                 "inSla", 
-                "subCategory" as "detail_category"
+                "subCategory" as "detail_category", -- Used for Top KIPs (existing)
+                "category" as "general_category"    -- NEW: Used for Top 5 Category
             FROM "RawOmnix"
             WHERE "date_start_interaction" BETWEEN $1::timestamp AND $2::timestamp
         )
     `;
 
-    // 2. MAIN METRIC AGGREGATION
-    // We use queryRawUnsafe to inject the CTE string
+    // 2. FETCH ALL DAILY TRENDS IN ONE GO (Optimization)
+    // We fetch daily stats for ALL products here to avoid N+1 queries in the loop
+    const dailyStatsRaw = await this.prisma.$queryRawUnsafe<any[]>(`
+        ${unifiedCte}
+        SELECT 
+            "product",
+            TO_CHAR("ticket_created", 'YYYY-MM-DD') as "date",
+            COUNT(*)::int as "total",
+            CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
+                 THEN ROUND(
+                    (COUNT(*) FILTER (WHERE "inSla")::decimal / 
+                     COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
+                 )
+                 ELSE 0 
+            END as "dailySla"
+        FROM "UnifiedData"
+        WHERE "product" IN ('CONNECTIVITY', 'SOLUTION', 'DADS')
+        GROUP BY "product", TO_CHAR("ticket_created", 'YYYY-MM-DD')
+        ORDER BY "date" ASC
+    `, filter.startDate, filter.endDate);
+
+    // 3. MAIN METRIC AGGREGATION (Product Level)
     const products = await this.prisma.$queryRawUnsafe<any[]>(`
         ${unifiedCte}
         SELECT 
@@ -451,9 +478,10 @@ export class OcaOmnixService {
         GROUP BY "product"
     `, filter.startDate, filter.endDate);
 
-    // 3. ATTACH TOP 10 KIP (Categories)
-    // We reuse the exact same CTE to ensure data consistency
+    // 4. ATTACH DETAILS (Top KIPs & Top Categories)
     const detailed = await Promise.all(products.map(async (p) => {
+        
+        // A. Existing: Top 10 KIPs (detail_category)
         const topKips = await this.prisma.$queryRawUnsafe<any[]>(`
             ${unifiedCte}
             SELECT 
@@ -464,13 +492,38 @@ export class OcaOmnixService {
                      ELSE 0 
                 END as "kipSla"
             FROM "UnifiedData"
-            WHERE "product" = $3 -- $3 matches the passed 'p.product'
+            WHERE "product" = $3
             GROUP BY "detail_category"
             ORDER BY total DESC
             LIMIT 10
         `, filter.startDate, filter.endDate, p.product);
 
-        return { ...p, topKips };
+        // B. New Requirement: Top 5 General Categories (general_category)
+        const topCategories = await this.prisma.$queryRawUnsafe<any[]>(`
+            ${unifiedCte}
+            SELECT 
+                "general_category", 
+                COUNT(*)::int as total,
+                CASE WHEN COUNT(*) > 0 
+                     THEN ROUND((COUNT(*) FILTER (WHERE "inSla")::decimal / COUNT(*)) * 100, 2) 
+                     ELSE 0 
+                END as "catSla"
+            FROM "UnifiedData"
+            WHERE "product" = $3
+            GROUP BY "general_category"
+            ORDER BY total DESC
+            LIMIT 5
+        `, filter.startDate, filter.endDate, p.product);
+
+        // C. New Requirement: Attach Daily Trends (mapped from step 2)
+        const trend = dailyStatsRaw.filter((d) => d.product === p.product);
+
+        return { 
+            ...p, 
+            topKips, 
+            topCategories, 
+            trend 
+        };
     }));
 
     return detailed;
