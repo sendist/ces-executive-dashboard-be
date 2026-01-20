@@ -7,52 +7,95 @@ import { Prisma } from '@prisma/client';
 export class OcaOmnixService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ---------------------------------------------------------
-  // 1. TOP CARDS (Summary)
-  // ---------------------------------------------------------
-  async getExecutiveSummary(filter: DashboardFilterDto) {
-    // We use a single SQL query to get all top-level metrics at once
-    const result = await this.prisma.$queryRaw<any[]>`
+async getExecutiveSummary(filter: DashboardFilterDto) {
+    // 1. DEFINE CTE (Reusable "Virtual Table")
+    // We normalize the timestamp to "ticket_timestamp" for easier filtering
+    const unifiedCte = `
         WITH "UnifiedTickets" AS (
-        -- 1. DATA FROM OCA
-        SELECT 
-            "last_status", 
-            "statusTiket", 
-            "inSla"
-        FROM "RawOca"
-        WHERE "ticket_created" BETWEEN ${filter.startDate}::timestamp AND ${filter.endDate}::timestamp
+            SELECT 
+                "last_status", 
+                "statusTiket", 
+                "inSla",
+                "ticket_created" as "ticket_timestamp"
+            FROM "RawOca"
+            -- We don't filter by date inside the CTE anymore because 
+            -- the sub-queries need different date ranges.
+            
+            UNION ALL
 
-        UNION ALL
-
-        -- 2. DATA FROM OMNIX
-        SELECT 
-            "ticket_status_name" as "last_status",              -- Map 'status' -> 'last_status'
-            "statusTiket",       -- Map status boolean if exists
-            "inSla"           -- Map SLA boolean
-        FROM "RawOmnix"
-        WHERE "date_start_interaction" BETWEEN ${filter.startDate}::timestamp AND ${filter.endDate}::timestamp
+            SELECT 
+                "ticket_status_name" as "last_status", 
+                "statusTiket", 
+                "inSla",
+                "date_start_interaction" as "ticket_timestamp"
+            FROM "RawOmnix"
         )
-
-        -- 3. AGGREGATION (Runs on the combined dataset)
-        SELECT 
-            COUNT(*)::int as "totalTickets",
-            
-            COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "totalOpen",
-            COUNT(*) FILTER (WHERE "last_status" = 'Closed')::int as "totalClosed",
-            
-            -- SLA Calculation
-            CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
-                THEN ROUND(
-                    (COUNT(*) FILTER (WHERE "inSla")::decimal / 
-                    COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
-                )
-                ELSE 0 
-            END as "slaPercentage"
-        FROM "UnifiedTickets"
     `;
 
-    return result[0];
-  }
+    // 2. RUN 3 QUERIES IN PARALLEL
+    const [summaryResult, dailyResult, hourlyResult] = await Promise.all([
+        
+        // A. SUMMARY METRICS (Uses User's Selected Date Range)
+        this.prisma.$queryRawUnsafe<any[]>(`
+            ${unifiedCte}
+            SELECT 
+                COUNT(*)::int as "totalTickets",
+                COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "totalOpen",
+                COUNT(*) FILTER (WHERE "last_status" = 'Closed')::int as "totalClosed",
+                CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
+                     THEN ROUND(
+                        (COUNT(*) FILTER (WHERE "inSla")::decimal / 
+                        COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
+                     )
+                     ELSE 0 
+                END as "slaPercentage"
+            FROM "UnifiedTickets"
+            WHERE "ticket_timestamp" BETWEEN $1::timestamp AND $2::timestamp
+        `, filter.startDate, filter.endDate),
+
+        // B. DAILY TREND (EndDate and 6 days before it = 7 days total)
+        this.prisma.$queryRawUnsafe<any[]>(`
+            ${unifiedCte}
+            SELECT 
+                TO_CHAR("ticket_timestamp", 'YYYY-MM-DD') as "date",
+                COUNT(*)::int as "value",
+                CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
+                     THEN ROUND(
+                        (COUNT(*) FILTER (WHERE "inSla")::decimal / 
+                        COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
+                     )
+                     ELSE 0 
+                END as "sla"
+            FROM "UnifiedTickets"
+            WHERE "ticket_timestamp" >= ($1::date - INTERVAL '6 days') 
+              AND "ticket_timestamp" <  ($1::date + INTERVAL '1 day') -- Include full endDate
+            GROUP BY 1
+            ORDER BY 1 ASC
+        `, filter.endDate),
+
+        // C. 3-HOUR INTERVAL TREND (Only for EndDate)
+        // Logic: (Hour / 3) * 3 gives us 0, 3, 6, 9, 12...
+        this.prisma.$queryRawUnsafe<any[]>(`
+            ${unifiedCte}
+            SELECT 
+                TRIM(TO_CHAR((EXTRACT(HOUR FROM "ticket_timestamp")::int / 3) * 3, '00')) || ':00' as "time_bucket",
+                COUNT(*)::int as "created",
+                COUNT(*) FILTER (WHERE "last_status" = 'Closed')::int as "solved"
+            FROM "UnifiedTickets"
+            WHERE "ticket_timestamp" >= $1::date 
+              AND "ticket_timestamp" <  ($1::date + INTERVAL '1 day')
+            GROUP BY 1
+            ORDER BY 1 ASC
+        `, filter.endDate)
+    ]);
+
+    // 3. RETURN COMBINED RESPONSE
+    return {
+        ...summaryResult[0], // Spread summary metrics (totalTickets, etc.)
+        dailyTrend: dailyResult,
+        hourlyTrend: hourlyResult
+    };
+}
 
   // ---------------------------------------------------------
   // 2. CHANNEL BREAKDOWN (The Complex Pivot)
@@ -307,61 +350,80 @@ export class OcaOmnixService {
         return { stats: stats[0] || { openTickets: 0, over3h: 0 }, topCorps };
     }
 
-  // ---------------------------------------------------------
-  // 5. TOP 3 KIP PER COMPANY (Advanced SQL)
-  // ---------------------------------------------------------
-  async getTopKipPerCompany(query: PaginationDto) {
+ async getTopKipPerCompany(query: PaginationDto) {
     const { page, limit, search, startDate, endDate } = query;
     const offset = ((page ? page : 1) - 1) * (limit ? limit : 10);
     const limitVal = limit ? limit : 10;
 
-    // 1. DEFINE CTE (The "Virtual Table" that combines both sources)
-    // We filter dates HERE so the subsequent queries are faster
+    // 1. DEFINE CTE (Reusable "Virtual Table")
     const unifiedCte = `
         WITH "UnifiedData" AS (
             SELECT 
                 "nama_perusahaan", 
-                "detail_category"
+                "detail_category",
+                "statusTiket",
+                "inSla"
             FROM "RawOca"
             WHERE "ticket_created" BETWEEN $1::timestamp AND $2::timestamp
             
             UNION ALL
             
             SELECT 
-                "ticket_perusahaan" as "nama_perusahaan", -- Map Omnix Name
-                "subCategory" as "detail_category" -- Map Omnix Category
+                "ticket_perusahaan" as "nama_perusahaan", 
+                "subCategory" as "detail_category",
+                "statusTiket",
+                "inSla"
             FROM "RawOmnix"
             WHERE "date_start_interaction" BETWEEN $1::timestamp AND $2::timestamp
         )
     `;
 
     // ---------------------------------------------------------
-    // STEP 1: Get Paginated List of Top Companies
+    // STEP 1: Get Paginated List of Companies (With SEARCH)
     // ---------------------------------------------------------
+    // We dynamically add the search condition here
+    const searchCondition = search ? `AND "nama_perusahaan" ILIKE '%' || $3 || '%'` : '';
+
     const companyQuery = `
         ${unifiedCte}
-        SELECT "nama_perusahaan", COUNT(*)::int as total_tickets
+        SELECT 
+            "nama_perusahaan", 
+            COUNT(*)::int as total_tickets,
+            -- Company Level SLA
+            CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
+                 THEN ROUND(
+                    (COUNT(*) FILTER (WHERE "inSla")::decimal / 
+                     COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
+                 )
+                 ELSE 0 
+            END as "company_sla"
         FROM "UnifiedData"
         WHERE 1=1
-        ${search ? `AND "nama_perusahaan" ILIKE '%' || $3 || '%'` : ''}
+        ${searchCondition}  -- <--- Search is applied here
         GROUP BY "nama_perusahaan"
         ORDER BY total_tickets DESC
         LIMIT ${limitVal} OFFSET ${offset}
     `;
 
-    // Params: [startDate, endDate, (optional) search]
+    // Define params for Step 1
+    // If search exists, we pass 3 params ($1, $2, $3). If not, just 2 ($1, $2).
     const companyParams = search ? [startDate, endDate, search] : [startDate, endDate];
+
     const companies = await this.prisma.$queryRawUnsafe<any[]>(companyQuery, ...companyParams);
 
-    if (companies.length === 0) return []; // Return empty if no data found
+    if (companies.length === 0) return []; // Stop if no companies match the search
 
     // ---------------------------------------------------------
-    // STEP 2: Get Top 3 KIPs (Categories) for THESE Companies
+    // STEP 2: Get Top 3 KIPs for the FOUND Companies
     // ---------------------------------------------------------
     const companyNames = companies.map(c => c.nama_perusahaan);
     
-    // Generate placeholders dynamically ($3, $4, $5...) because we already used $1 and $2 for dates
-    // Example: if we have 3 companies, this creates "$3, $4, $5"
+    // IMPORTANT: We create a fresh parameter array for Step 2.
+    // We ignore the 'search' param here because we already have the specific list of companies.
+    // Params will be: [$1=Start, $2=End, $3=Comp1, $4=Comp2, ...]
+    const kipsParams = [startDate, endDate, ...companyNames];
+
+    // We map placeholders starting from index 3 ($3)
     const placeholders = companyNames.map((_, i) => `$${i + 3}`).join(', ');
 
     const kipsQuery = `
@@ -371,22 +433,23 @@ export class OcaOmnixService {
                 "nama_perusahaan", 
                 "detail_category", 
                 COUNT(*)::int as kip_count,
+                -- KIP (Category) Level SLA
+                CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
+                     THEN ROUND(
+                        (COUNT(*) FILTER (WHERE "inSla")::decimal / 
+                         COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal) * 100, 2
+                     )
+                     ELSE 0 
+                END as "kip_sla",
                 ROW_NUMBER() OVER(PARTITION BY "nama_perusahaan" ORDER BY COUNT(*) DESC)::int as rn
             FROM "UnifiedData"
             WHERE "nama_perusahaan" IN (${placeholders}) 
-            -- Note: Date filter is already applied inside the UnifiedData CTE
             GROUP BY "nama_perusahaan", "detail_category"
         )
         SELECT * FROM RankedKip WHERE rn <= 3
     `;
 
-    // Params: [startDate, endDate, ...companyName1, companyName2, ...]
-    const kips = await this.prisma.$queryRawUnsafe<any[]>(
-        kipsQuery, 
-        startDate, 
-        endDate, 
-        ...companyNames
-    );
+    const kips = await this.prisma.$queryRawUnsafe<any[]>(kipsQuery, ...kipsParams);
 
     // ---------------------------------------------------------
     // STEP 3: Map Results
@@ -395,10 +458,18 @@ export class OcaOmnixService {
         return {
             company: comp.nama_perusahaan,
             totalTickets: comp.total_tickets,
-            topKips: kips.filter(k => k.nama_perusahaan === comp.nama_perusahaan)
+            companySla: comp.company_sla,
+            topKips: kips
+                .filter(k => k.nama_perusahaan === comp.nama_perusahaan)
+                .map(k => ({
+                    detail_category: k.detail_category,
+                    kip_count: k.kip_count,
+                    kip_sla: k.kip_sla,
+                    rn: k.rn
+                }))
         };
     });
-  }
+}
   
   // ---------------------------------------------------------
   // 6. PRODUCT BREAKDOWN (Connectivity, Solution, etc)
