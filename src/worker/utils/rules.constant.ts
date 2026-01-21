@@ -16,46 +16,46 @@ export const TICKET_RULES = [
   // --- PRIORITY 1: Specific Email/Subject Checks (Fastest) ---
   {
     status: 'EMS',
-    column: 'customerEmail',
+    column: 'Customer Email',
     check: (val: string) => val === 'ems@telkomsel.co.id', // Exact match
   },
   {
     status: 'RPA',
-    column: 'customerEmail',
+    column: 'Customer Email',
     check: (val: string) => val === 'rpa_ces@telkomsel.co.id',
   },
   {
     status: 'HIA',
-    column: 'ticketSubject',
+    column: 'Ticket Subject',
     check: (val: string) => val === 'UAT HIA',
   },
 
   // --- PRIORITY 2: Double / Spam Checks (Complex Text) ---
   {
     status: 'Double',
-    column: 'department',
+    column: 'Department',
     check: (val: string) => val === 'Tiket Take Out',
   },
   {
     status: 'Double',
-    column: 'channel',
+    column: 'Channel',
     check: (val: string) => val === 'Live Chat',
   },
   {
     status: 'Double',
-    column: 'assignee',
+    column: 'Assignee',
     check: (val: string) => val === 'TL Iwan Hermawan',
   },
   {
     status: 'Double',
-    column: 'description',
+    column: 'Description',
     // Pre-compiled Regex for speed
     regex: createRegex('spam / out of topic / double ticket / dobel ticket / double tiket / dobel tiket / balikan ems / balasan ems'),
     check: function(val: string) { return this.regex.test(val || ''); }
   },
   {
     status: 'Double',
-    column: 'detailCategory',
+    column: 'Detail Category',
     regex: createRegex('I12-Status ticket / I12-Ticket ID / I11-Interaksi terputus / I12-Out Of Topic / Out Of Topic'),
     check: function(val: string) { return this.regex.test(val || ''); }
   },
@@ -63,7 +63,7 @@ export const TICKET_RULES = [
   // --- PRIORITY 3: RPA Description Check ---
   {
     status: 'RPA',
-    column: 'description',
+    column: 'Description',
     check: (val: string) => (val || '').trim() === 'RPA',
   },
 ];

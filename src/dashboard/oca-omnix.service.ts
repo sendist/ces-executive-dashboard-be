@@ -39,9 +39,9 @@ async getExecutiveSummary(filter: DashboardFilterDto) {
         this.prisma.$queryRawUnsafe<any[]>(`
             ${unifiedCte}
             SELECT 
-                COUNT(*)::int as "totalTickets",
-                COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "totalOpen",
-                COUNT(*) FILTER (WHERE "last_status" = 'Closed')::int as "totalClosed",
+                COUNT(*) FILTER (WHERE "statusTiket" = true)::int as "totalTickets",
+                COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "statusTiket" = true)::int as "totalOpen",
+                COUNT(*) FILTER (WHERE "last_status" = 'Closed' AND "statusTiket" = true)::int as "totalClosed",
                 CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
                      THEN ROUND(
                         (COUNT(*) FILTER (WHERE "inSla")::decimal / 
@@ -133,7 +133,7 @@ async getExecutiveSummary(filter: DashboardFilterDto) {
     SELECT
         channel,
         source_origin, -- Grab this so we know which table to query for details later
-        COUNT(*)::int as "total",
+        COUNT(*) FILTER (WHERE "statusTiket" = true)::int as "total",
         
         -- % SLA (Logic reused exactly as is!)
         CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
@@ -141,8 +141,8 @@ async getExecutiveSummary(filter: DashboardFilterDto) {
              ELSE 0 END as "pctSla",
 
         -- Basic Counts
-        COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "open",
-        COUNT(*) FILTER (WHERE "last_status" = 'Closed' OR "last_status" = 'Close')::int as "closed",
+        COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "statusTiket" = true)::int as "open",
+        COUNT(*) FILTER (WHERE ("last_status" = 'Closed' OR "last_status" = 'Close')  AND "statusTiket" = true)::int as "closed",
 
         -- Product Specifics
         COUNT(*) FILTER (WHERE "last_status" = 'Open' AND "product" = 'CONNECTIVITY')::int as "connOpen",
