@@ -17,16 +17,19 @@ export const TICKET_RULES = [
   {
     status: 'EMS',
     column: 'Customer Email',
+    prop: 'customerEmail',
     check: (val: string) => val === 'ems@telkomsel.co.id', // Exact match
   },
   {
     status: 'RPA',
     column: 'Customer Email',
+    prop: 'customerEmail',
     check: (val: string) => val === 'rpa_ces@telkomsel.co.id',
   },
   {
     status: 'HIA',
     column: 'Ticket Subject',
+    prop: 'ticketSubject',
     check: (val: string) => val === 'UAT HIA',
   },
 
@@ -34,21 +37,25 @@ export const TICKET_RULES = [
   {
     status: 'Double',
     column: 'Department',
+    prop: 'department',
     check: (val: string) => val === 'Tiket Take Out',
   },
   {
     status: 'Double',
     column: 'Channel',
+    prop: 'channel',
     check: (val: string) => val === 'Live Chat',
   },
   {
     status: 'Double',
     column: 'Assignee',
+    prop: 'assignee',
     check: (val: string) => val === 'TL Iwan Hermawan',
   },
   {
     status: 'Double',
     column: 'Description',
+    prop: 'description',
     // Pre-compiled Regex for speed
     regex: createRegex('spam / out of topic / double ticket / dobel ticket / double tiket / dobel tiket / balikan ems / balasan ems'),
     check: function(val: string) { return this.regex.test(val || ''); }
@@ -56,6 +63,7 @@ export const TICKET_RULES = [
   {
     status: 'Double',
     column: 'Detail Category',
+    prop: 'detailCategory',
     regex: createRegex('I12-Status ticket / I12-Ticket ID / I11-Interaksi terputus / I12-Out Of Topic / Out Of Topic'),
     check: function(val: string) { return this.regex.test(val || ''); }
   },
@@ -64,6 +72,7 @@ export const TICKET_RULES = [
   {
     status: 'RPA',
     column: 'Description',
+    prop: 'description',
     check: (val: string) => (val || '').trim() === 'RPA',
   },
 ];
@@ -91,6 +100,7 @@ const SLA_LIMITS = {
   SOLUTION: 6 * 60 * 60 * 1000,     // 6 Hours in ms
 };
 
+
 export function calculateSlaStatus(row: any): boolean {
   // 1. Extract raw values
   const type = row['product'] || ''; 
@@ -98,34 +108,47 @@ export function calculateSlaStatus(row: any): boolean {
   const resolutionRaw = row['resolveTime'];
 
   // 2. Handle "Blank" or "-" logic
-  // Check the raw value first
   if (!resolutionRaw || resolutionRaw === '-') {
     return true; // Implies IN SLA
   }
 
-  // 3. Parse Dates using your robust ExcelUtils
-  // converting whatever mess (Number/String/Date) into a valid JS Date
-  const createdDate = ExcelUtils.parseExcelDate(createdRaw);
-  const resolutionDate = ExcelUtils.parseExcelDate(resolutionRaw);
+  // --- THE FIX: Smart Parsing Helper ---
+  const safeParse = (value: any): Date | null => {
+    // A. If it's already a JS Date object (common in NestJS/Prisma), return it
+    if (value instanceof Date) return value;
+    
+    // B. If it's a standard ISO String (from JSON API), let JS parse it natively
+    // We check for "T" and "Z" or standard dashes to identify ISO-like strings quickly
+    if (typeof value === 'string' && !isNaN(Date.parse(value))) {
+       return new Date(value);
+    }
 
-  // Safety check: Ensure we actually got valid dates back
+    // C. Fallback: Use your utility for Excel's messy formats
+    return ExcelUtils.parseExcelDate(value);
+  };
+  // -------------------------------------
+
+  // 3. Parse Dates using the helper
+  const createdDate = safeParse(createdRaw);
+  const resolutionDate = safeParse(resolutionRaw);
+
+  // Safety check
   if (!createdDate || !resolutionDate || !isValid(createdDate) || !isValid(resolutionDate)) {
-    console.warn(`SLA Calculation Failed: Invalid Date. Created: ${createdRaw}, Res: ${resolutionRaw}`);
+    // Log the actual raw value to debug
+    console.warn(`SLA Calc Failed: Invalid Date. RawCreated: ${createdRaw}, RawRes: ${resolutionRaw}`);
     return false; 
   }
 
-  // 4. Calculate Duration (Now safe because inputs are guaranteed Date objects)
+  // 4. Calculate Duration
   const durationMs = differenceInMilliseconds(resolutionDate, createdDate);
 
   // 5. Apply Business Logic
-  // CASE A: Connectivity (Limit: 3 Hours -> 10800000 ms)
   if (type.toLowerCase() === 'connectivity') {
-    return durationMs <= 10800000; 
+    return durationMs <= 10800000; // 3 Hours
   }
 
-  // CASE B: Solution (Limit: 6 Hours -> 21600000 ms)
   if (type.toLowerCase() === 'solution') {
-     return durationMs <= 21600000;
+     return durationMs <= 21600000; // 6 Hours
   }
 
   return false;

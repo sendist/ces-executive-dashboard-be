@@ -7,11 +7,13 @@ import csv from 'csv-parser';
 import * as fs from 'fs';
 import { ExcelUtils } from "../excel-utils.helper";
 import { calculateFcrStatus, calculateSlaStatus, determineEskalasi, TICKET_RULES } from "../utils/rules.constant";
+import { OcaUpsertService } from "../repository/oca-upsert.service";
 
 @Injectable()
 export class OcaUploadService {
   constructor(
       private readonly prisma: PrismaService,
+      private readonly ocaUpsertService: OcaUpsertService
   ){}
   // regex to identify VIP keywords
   private readonly vipRegex = /vvip|vip|direk|director|komisaris/i;
@@ -164,129 +166,17 @@ export class OcaUploadService {
 
       // If batch is full, pause stream, save to DB, then resume
       if (rowsToInsert.length >= batchSize) {
-        await this.saveBatch(rowsToInsert);
+        await this.ocaUpsertService.saveBatch(rowsToInsert);
         rowsToInsert = [];
       }
     }
 
     // Save remaining rows
     if (rowsToInsert.length > 0) {
-      await this.saveBatch(rowsToInsert);
+      await this.ocaUpsertService.saveBatch(rowsToInsert);
     }
 
     return { status: 'CSV Ticket Report Completed' };
-  }
-
-  private async saveBatch(rows: any[]) {
-    if (rows.length === 0) return;
-
-    // 1. DEDUPLICATE IN MEMORY
-    const uniqueRowsMap = new Map<string, any>();
-    for (const row of rows) {
-      if (!row.ticketNumber) continue;
-      uniqueRowsMap.set(row.ticketNumber, row); 
-    }
-
-    const cleanRows = Array.from(uniqueRowsMap.values());
-    if (cleanRows.length === 0) return;
-
-    // 2. BUILD SQL VALUES (Order must match INSERT columns below)
-    const values = cleanRows.map((row) => {
-      return `(
-        ${ExcelUtils.formatSqlValue(row.ticketNumber)},
-        ${ExcelUtils.formatSqlValue(row.ticketSubject)},
-        ${ExcelUtils.formatSqlValue(row.channel)},
-        ${ExcelUtils.formatSqlValue(row.category)},
-        ${ExcelUtils.formatSqlValue(row.reporter)},
-        ${ExcelUtils.formatSqlValue(row.assignee)},
-        ${ExcelUtils.formatSqlValue(row.department)},
-        ${ExcelUtils.formatSqlValue(row.priority)},
-        ${ExcelUtils.formatSqlValue(row.lastStatus)},
-        ${ExcelUtils.formatSqlValue(row.ticketCreated)},
-        ${ExcelUtils.formatSqlValue(row.lastUpdate)},
-        ${ExcelUtils.formatSqlValue(row.description)},
-        ${ExcelUtils.formatSqlValue(row.customerName)},
-        ${ExcelUtils.formatSqlValue(row.customerPhone)},
-        ${ExcelUtils.formatSqlValue(row.customerAddress)},
-        ${ExcelUtils.formatSqlValue(row.customerEmail)},
-        ${ExcelUtils.formatSqlValue(row.firstResponseTime)},
-        ${ExcelUtils.formatSqlValue(row.totalResponseTime)},
-        ${ExcelUtils.formatSqlValue(row.totalResolutionTime)},
-        ${ExcelUtils.formatSqlValue(row.resolveTime)},
-        ${ExcelUtils.formatSqlValue(row.resolvedBy)},
-        ${ExcelUtils.formatSqlValue(row.closedTime)},
-        ${ExcelUtils.formatSqlValue(row.ticketDuration)},
-        ${ExcelUtils.formatSqlValue(row.countInboundMessage)},
-        ${ExcelUtils.formatSqlValue(row.labelInRoom)},
-        ${ExcelUtils.formatSqlValue(row.firstResponseDuration)},
-        ${ExcelUtils.formatSqlValue(row.escalateTicket)},
-        ${ExcelUtils.formatSqlValue(row.lastAssigneeEscalation)},
-        ${ExcelUtils.formatSqlValue(row.lastStatusEscalation)},
-        ${ExcelUtils.formatSqlValue(row.lastUpdateEscalation)},
-        ${ExcelUtils.formatSqlValue(row.converse)},
-        ${ExcelUtils.formatSqlValue(row.moveToOtherChannel)},
-        ${ExcelUtils.formatSqlValue(row.previousChannel)},
-        ${ExcelUtils.formatSqlValue(row.amountRevenue)},
-        ${ExcelUtils.formatSqlValue(row.jumlahMsisdn)},
-        ${ExcelUtils.formatSqlValue(row.tags)},
-        ${ExcelUtils.formatSqlValue(row.idRemedyNo)},
-        ${ExcelUtils.formatSqlValue(row.eskalasiId)},
-        ${ExcelUtils.formatSqlValue(row.reasonOsl)},
-        ${ExcelUtils.formatSqlValue(row.projectId)},
-        ${ExcelUtils.formatSqlValue(row.namaPerusahaan)},
-        ${ExcelUtils.formatSqlValue(row.roaming)},
-        ${ExcelUtils.formatSqlValue(row.subCategory)},
-        ${ExcelUtils.formatSqlValue(row.detailCategory)},
-        ${ExcelUtils.formatSqlValue(row.iot)},
-        ${ExcelUtils.formatSqlValue(row.validationStatus)},
-        ${ExcelUtils.formatSqlValue(row.statusTiket)},
-        ${ExcelUtils.formatSqlValue(row.product)},
-        ${ExcelUtils.formatSqlValue(row.sla)},
-        ${ExcelUtils.formatSqlValue(row.fcr)},
-        ${ExcelUtils.formatSqlValue(row.eskalasi)},
-        ${ExcelUtils.formatSqlValue(row.isVip)},
-        ${ExcelUtils.formatSqlValue(row.isPareto)},
-        ${ExcelUtils.formatSqlValue(row.updatedAtExcel)}
-
-      )`;
-    }).join(',');
-
-    // 3. EXECUTE QUERY with SNAKE_CASE columns
-    const query = `
-      INSERT INTO "RawOca" (
-        "ticket_number", "ticket_subject", "channel", "category", 
-        "reporter", "assignee", "department", "priority", "last_status",
-        "ticket_created", "last_update", "description", 
-        "customer_name", "customer_phone", "customer_address", "customer_email",
-        "first_response_time", "total_response_time", "total_resolution_time",
-        "resolve_time", "resolved_by", "closed_time", "ticket_duration",
-        "count_inbound_message", "label_in_room", "first_response_duration",
-        "escalate_ticket", "last_assignee_escalation", "last_status_escalation",
-        "last_update_escalation", "converse", "move_to_other_channel", "previous_channel",
-        "amount_revenue", "jumlah_msisdn", "tags", "id_remedy_no",
-        "eskalasi_id_remedy_it_ao_ems", "reason_osl", "project_id", "nama_perusahaan",
-        "roaming", "sub_category", "detail_category", "iot", "validationStatus", "statusTiket", "product",
-        "inSla", "isFcr", "eskalasi", "isVip", "isPareto", "updated_at_excel"
-      )
-      VALUES ${values}
-      ON CONFLICT ("ticket_number")
-      DO UPDATE SET
-        "ticket_subject" = EXCLUDED."ticket_subject",
-        "channel"        = EXCLUDED."channel",
-        "category"       = EXCLUDED."category",
-        "assignee"       = EXCLUDED."assignee",
-        "last_status"    = EXCLUDED."last_status",
-        "last_update"    = EXCLUDED."last_update",
-        "description"    = EXCLUDED."description",
-        "resolved_by"    = EXCLUDED."resolved_by",
-        "closed_time"    = EXCLUDED."closed_time",
-        "validationStatus" = EXCLUDED."validationStatus",
-        "statusTiket"    = EXCLUDED."statusTiket",
-        "inSla"            = EXCLUDED."inSla",
-        "updated_at_excel" = EXCLUDED."updated_at_excel";
-    `;
-
-    await this.prisma.$executeRawUnsafe(query);
   }
 
   private classifyTicket(row: any) {

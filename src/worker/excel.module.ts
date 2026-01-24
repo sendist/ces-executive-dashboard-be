@@ -8,6 +8,7 @@ import { CallUploadService } from './services/call-upload.service';
 import { CsatUploadService } from './services/csat-upload.service';
 import { OcaUploadService } from './services/oca-upload.service';
 import { OmnixUploadService } from './services/omnix-upload.service';
+import { OcaUpsertService } from './repository/oca-upsert.service';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OmnixUploadService } from './services/omnix-upload.service';
     OcaUploadService,
     OmnixUploadService,
     PrismaService,
+    OcaUpsertService,
   ],
   exports: [BullModule], 
 })
