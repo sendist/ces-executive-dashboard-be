@@ -6,9 +6,18 @@ import { BullModule } from '@nestjs/bullmq';
 import { UploadModule } from './upload/upload.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { HttpModule } from '@nestjs/axios';
+import { OcaTicketSchedulerService } from './worker/scheduler/oca-ticket-scheduler.service';
+import { DailyOcaTicketProcessor } from './worker/processor/daily-oca-ticket-processor';
+import { OcaUpsertService } from './worker/repository/oca-upsert.service';
+import { SchedulerModule } from './scheduler/scheduler.module';
 
 @Module({
   imports: [
+    // 1. Enable Scheduling
+    ScheduleModule.forRoot(),
+    
     BullModule.forRoot({
     connection: process.env.REDIS_URL
     ? {
@@ -22,11 +31,15 @@ import { AuthModule } from './modules/auth/auth.module';
       },
     }),
 
+
+    HttpModule,
+
     AuthModule,
     
     PrismaModule,
     UploadModule,
     DashboardModule,
+    SchedulerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
