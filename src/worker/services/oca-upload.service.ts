@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "prisma/prisma.service";
 import { Job } from 'bullmq';
 import csv from 'csv-parser';
@@ -11,6 +11,8 @@ import { OcaUpsertService } from "../repository/oca-upsert.service";
 
 @Injectable()
 export class OcaUploadService {
+  private readonly logger = new Logger(OcaUploadService.name);
+  
   constructor(
       private readonly prisma: PrismaService,
       private readonly ocaUpsertService: OcaUpsertService
@@ -52,6 +54,8 @@ export class OcaUploadService {
     }));
 
     // Async Iterator: This reads the CSV line by line without loading it all into RAM
+
+    this.logger.log(`Starting Oca CSV Batch Upload Service`)
     for await (const row of stream) {
       const classification = this.classifyTicket(row);
 
@@ -175,7 +179,7 @@ export class OcaUploadService {
     if (rowsToInsert.length > 0) {
       await this.ocaUpsertService.saveBatch(rowsToInsert);
     }
-
+    this.logger.log(`Oca CSV Batch Upload Service Completed`)
     return { status: 'CSV Ticket Report Completed' };
   }
 

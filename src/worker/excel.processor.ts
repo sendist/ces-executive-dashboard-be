@@ -6,9 +6,12 @@ import { CallUploadService } from './services/call-upload.service';
 import { OmnixUploadService } from './services/omnix-upload.service';
 import { OcaUploadService } from './services/oca-upload.service';
 import * as fs from 'fs'; 
+import { Logger } from '@nestjs/common';
 
 @Processor('excel-queue')
 export class ExcelProcessor extends WorkerHost {
+  private readonly logger = new Logger(ExcelProcessor.name);
+  
   constructor(
     private prisma: PrismaService,
     private readonly csatUploadService: CsatUploadService,
@@ -23,6 +26,7 @@ export class ExcelProcessor extends WorkerHost {
   async process(job: Job<any, any, string>): Promise<any> {
     const filePath = job.data.path;
 
+    this.logger.log(`Processing ${job.name} with id: ${job.id}`)
     try {
       switch (job.name) {
         case 'process-csat-report':

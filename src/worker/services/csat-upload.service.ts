@@ -1,24 +1,21 @@
-import { Injectable } from "@nestjs/common";
-import { Job } from "bullmq";
-import { PrismaService } from "prisma/prisma.service";
+import { Injectable } from '@nestjs/common';
+import { Job } from 'bullmq';
+import { PrismaService } from 'prisma/prisma.service';
 import * as ExcelJS from 'exceljs';
-import { ExcelUtils } from "../excel-utils.helper";
+import { ExcelUtils } from '../excel-utils.helper';
 import * as fs from 'fs';
-
 
 @Injectable()
 export class CsatUploadService {
-    constructor(
-        private readonly prisma: PrismaService,
-    ){}
-    
+  constructor(private readonly prisma: PrismaService) {}
+
   async process(job: Job<any, any, string>): Promise<any> {
     const filePath = job.data.path;
     if (!fs.existsSync(filePath)) {
-        console.error(`File missing at path: ${filePath}`);
-        // Throwing an error here marks the job as FAILED in BullMQ,
-        // but it won't crash your entire Node.js server.
-        throw new Error(`File not found: ${filePath} - likely a stale job.`);
+      console.error(`File missing at path: ${filePath}`);
+      // Throwing an error here marks the job as FAILED in BullMQ,
+      // but it won't crash your entire Node.js server.
+      throw new Error(`File not found: ${filePath} - likely a stale job.`);
     }
 
     const batchSize = 1000;
@@ -27,33 +24,41 @@ export class CsatUploadService {
 
     // 1. Stream the Excel file
     const workbook = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {});
-    
+
     for await (const worksheet of workbook) {
       for await (const row of worksheet) {
         if (row.number === 1) continue; // Skip Header
 
         // SAFE PARSING LOGIC
         // Handle empty dates or invalid scores gracefully
-        const createdAtRaw = row.getCell(2).value; 
+        const createdAtRaw = row.getCell(2).value;
         const answeredAtRaw = row.getCell(4).value;
         const scoreRaw = row.getCell(9).value; // "Numeric" column
-
+        
         if (createdAtRaw) {
-            affectedDates.add(ExcelUtils.parseExcelDate(createdAtRaw).toISOString().split('T')[0]);
+          const parsedDate = ExcelUtils.parseExcelDate(createdAtRaw);
+
+          // Check if the parsing actually succeeded
+          if (parsedDate) {
+            const dateString = parsedDate.toISOString().split('T')[0];
+            affectedDates.add(dateString);
+          }
         }
 
         const rowData = {
           // id: this.extractFirstId(row.getCell(7).text),
-          createdAt: ExcelUtils.parseExcelDate(createdAtRaw), 
+          createdAt: ExcelUtils.parseExcelDate(createdAtRaw),
           status: row.getCell(3).text,
           // Only parse answeredAt if it exists
-          answeredAt: answeredAtRaw ? ExcelUtils.parseExcelDate(answeredAtRaw) : null,
+          answeredAt: answeredAtRaw
+            ? ExcelUtils.parseExcelDate(answeredAtRaw)
+            : null,
           customer: row.getCell(5).text,
           ticketNumbers: row.getCell(6).text,
           interactionId: row.getCell(7).text,
           question1: row.getCell(8).text,
           // Parse score to Int, handle nulls
-          numeric: scoreRaw ? parseInt(scoreRaw.toString()) : null, 
+          numeric: scoreRaw ? parseInt(scoreRaw.toString()) : null,
           question2: row.getCell(10).text,
           question3: row.getCell(11).text,
           question4: row.getCell(12).text,
@@ -76,20 +81,20 @@ export class CsatUploadService {
       await this.saveBatch(rowsToInsert);
     }
 
-    const uniqueDates = Array.from(affectedDates).map(d => new Date(d));
+    const uniqueDates = Array.from(affectedDates).map((d) => new Date(d));
 
     // 2. RUN SUMMARIZATION
     await this.refreshDailyStats(uniqueDates);
-    
+
     return { status: 'Completed' };
   }
 
   // private async saveBatch(rows) {
-  //   // skipDuplicates ensures if you upload the same file twice, 
+  //   // skipDuplicates ensures if you upload the same file twice,
   //   // it won't crash on the unique InteractionID constraint.
-  //   await this.prisma.rawCsat.createMany({ 
-  //     data: rows, 
-  //     skipDuplicates: true 
+  //   await this.prisma.rawCsat.createMany({
+  //     data: rows,
+  //     skipDuplicates: true
   //   });
   // }
 
@@ -103,24 +108,24 @@ export class CsatUploadService {
     const internalDuplicates: any[] = [];
 
     for (const row of rows) {
-        const uniqueKey = `${row.createdAt.toISOString()}_${row.customer}`;
-        
-        if (uniqueRowsMap.has(uniqueKey)) {
-          // This is a duplicate within the Excel file itself
-          internalDuplicates.push({ 
-            customer: row.customer, 
-            date: row.createdAt,
-            reason: 'Duplicate found inside the same Excel batch'
-          });
-        } else {
-          uniqueRowsMap.set(uniqueKey, row);
-        }
-      }
+      const uniqueKey = `${row.createdAt.toISOString()}_${row.customer}`;
 
-      // Log internal duplicates if any
-      if (internalDuplicates.length > 0) {
-        console.log('internal Duplicates Skipped:', internalDuplicates);
+      if (uniqueRowsMap.has(uniqueKey)) {
+        // This is a duplicate within the Excel file itself
+        internalDuplicates.push({
+          customer: row.customer,
+          date: row.createdAt,
+          reason: 'Duplicate found inside the same Excel batch',
+        });
+      } else {
+        uniqueRowsMap.set(uniqueKey, row);
       }
+    }
+
+    // Log internal duplicates if any
+    if (internalDuplicates.length > 0) {
+      console.log('internal Duplicates Skipped:', internalDuplicates);
+    }
 
     // Convert back to array
     const cleanRows = Array.from(uniqueRowsMap.values());
@@ -183,9 +188,9 @@ export class CsatUploadService {
     // Convert dates to string format 'YYYY-MM-DD' for the SQL query
     // Example: "'2025-01-01', '2025-01-02'"
     const dateStrings = targetDates
-        .map(d => `'${d.toISOString().split('T')[0]}'`)
-        .join(', ');
-        
+      .map((d) => `'${d.toISOString().split('T')[0]}'`)
+      .join(', ');
+
     const query = `
         INSERT INTO "DailyCsatStat" (
             "date", 
@@ -243,15 +248,15 @@ export class CsatUploadService {
 
     // await this.prisma.$executeRaw`
     //   INSERT INTO "DailyCsatStat" (
-    //     "date", 
-    //     "totalSurvey", 
-    //     "totalDijawab", 
-    //     "totalJawaban45", 
-    //     "scoreCsat", 
+    //     "date",
+    //     "totalSurvey",
+    //     "totalDijawab",
+    //     "totalJawaban45",
+    //     "scoreCsat",
     //     "persenCsat"
     //   )
     //   WITH DailyAggregates AS (
-    //     SELECT 
+    //     SELECT
     //       DATE("createdAt") as date,
     //       COUNT(*) as totalSurvey,
     //       COUNT(CASE WHEN "answeredAt" IS NOT NULL THEN 1 END) as totalDijawab,
@@ -260,29 +265,29 @@ export class CsatUploadService {
     //     GROUP BY DATE("createdAt")
     //   ),
     //   WithPercentage AS (
-    //     SELECT 
+    //     SELECT
     //       *,
-    //       CASE 
+    //       CASE
     //         WHEN totalDijawab = 0 THEN 0
     //         ELSE (CAST(totalJawaban45 AS FLOAT) / CAST(totalDijawab AS FLOAT)) * 100
     //       END as calculated_persen
     //     FROM DailyAggregates
     //   )
-    //   SELECT 
+    //   SELECT
     //     date,
     //     totalSurvey,
     //     totalDijawab,
     //     totalJawaban45,
-        
+
     //     -- 1. Calculate Score from Percentage * 5
     //     ((calculated_persen/100) * 5) as scoreCsat,
-        
+
     //     -- 2. The Percentage itself
     //     calculated_persen as persenCsat
 
     //   FROM WithPercentage
-    //   ON CONFLICT ("date") 
-    //   DO UPDATE SET 
+    //   ON CONFLICT ("date")
+    //   DO UPDATE SET
     //     "totalSurvey" = EXCLUDED."totalSurvey",
     //     "totalDijawab" = EXCLUDED."totalDijawab",
     //     "totalJawaban45" = EXCLUDED."totalJawaban45",
