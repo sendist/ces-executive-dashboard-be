@@ -23,6 +23,7 @@ export class OcaTicketSchedulerService {
 
     let page = 1;
     let hasMore = true;
+    let lastJob = '';
 
     while (hasMore) {
       // hasMore = false;
@@ -77,6 +78,7 @@ export class OcaTicketSchedulerService {
         this.logger.log(
           `Queued batch page ${page} with ${tickets.length} tickets, jobId: ${job.id}`,
         );
+        lastJob = job?.id ?? '';
       }
 
       // Pagination Logic
@@ -86,5 +88,7 @@ export class OcaTicketSchedulerService {
         page++;
       }
     }
+    this.logger.log('Ticket sync process completed.');
+    return { lastJob };
   }
 }

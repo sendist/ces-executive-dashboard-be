@@ -15,12 +15,14 @@ import { Queue } from 'bullmq';
 import { diskStorage } from 'multer';
 import { OcaReportSchedulerService } from 'src/worker/scheduler/oca-report-scheduler.service';
 import moment from 'moment';
+import { OcaTicketSchedulerService } from 'src/worker/scheduler/oca-ticket-scheduler.service';
 
 @Controller('schedule')
 export class ScheduleController {
   constructor(
     @InjectQueue('ticket-processing') private scheduleQueue: Queue,
     private readonly ocaReportService: OcaReportSchedulerService,
+    private readonly ocaTicketSchedulerService: OcaTicketSchedulerService,
   ) {}
 
   @Get('status/:jobId')
@@ -64,11 +66,18 @@ export class ScheduleController {
     @Body('endDate') endDate?: string,
   ) {
     // 1. Validation: Ensure dates are provided or use defaults
-    const start = startDate || moment().tz('Asia/Jakarta').subtract(8, 'days').format('YYYY-MM-DD');
-    const end = endDate || moment().tz('Asia/Jakarta').subtract(1, 'days').format('YYYY-MM-DD');
+    const start =
+      startDate ||
+      moment().tz('Asia/Jakarta').subtract(8, 'days').format('YYYY-MM-DD');
+    const end =
+      endDate ||
+      moment().tz('Asia/Jakarta').subtract(1, 'days').format('YYYY-MM-DD');
 
     // 2. Format validation (YYYY-MM-DD)
-    if (!moment(start, 'YYYY-MM-DD', true).isValid() || !moment(end, 'YYYY-MM-DD', true).isValid()) {
+    if (
+      !moment(start, 'YYYY-MM-DD', true).isValid() ||
+      !moment(end, 'YYYY-MM-DD', true).isValid()
+    ) {
       throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
     }
 
@@ -78,7 +87,17 @@ export class ScheduleController {
 
     return {
       message: 'Manual OCA Sync started and queued.',
-      ...result
+      ...result,
+    };
+  }
+
+  @Post('sync-daily-oca')
+  async syncDailyOca() {
+    const { lastJob } = await this.ocaTicketSchedulerService.handleCron();
+
+    return {
+      message: 'All ticket batches have been queued.',
+      jobId: lastJob,
     };
   }
 }
