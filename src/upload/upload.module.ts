@@ -14,9 +14,7 @@ import { ExcelModule } from 'src/worker/excel.module';
     ExcelModule,
   ],
   controllers: [UploadController],
-  providers: [
-    PrismaService,
-  ],
+  providers: [PrismaService],
   exports: [BullModule], // Export if other modules need to add jobs to this queue
 })
 export class UploadModule {}

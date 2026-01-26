@@ -1,43 +1,43 @@
 export class ExcelUtils {
- static parseExcelDate(value: any): Date | null {
-    if (!value) return null;
+static parseExcelDate(value: any): Date | null {
+  if (value == null || value === '') return null;
 
-    // --- CASE 1 & 2: Numeric or Already a Date Object ---
-    // If it's a number, we convert to Date first.
-    if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value.replace(',', '.'))))) {
-        const num = typeof value === 'number' ? value : Number(value.replace(',', '.'));
-        return new Date((num - 25569) * 86400000);
+  const WIB_OFFSET = 7 * 60 * 60 * 1000;
+
+  // Excel serial number (Excel stores local date)
+  if (typeof value === 'number') {
+    return new Date(
+      Date.UTC(1970, 0, 1) + (value - 25569) * 86400000 - WIB_OFFSET
+    );
+  }
+
+  if (value instanceof Date) {
+    return new Date(value.getTime() - WIB_OFFSET);
+  }
+
+  if (typeof value === 'string') {
+    if (/^\d+([.,]\d+)?$/.test(value)) {
+      const num = Number(value.replace(',', '.'));
+      return new Date(
+        Date.UTC(1970, 0, 1) + (num - 25569) * 86400000 - WIB_OFFSET
+      );
     }
 
-    if (value instanceof Date) {
-        // If it's already a Date, it might be in WIB. 
-        // We extract the "local" parts and rebuild it as UTC.
-        return new Date(Date.UTC(
-            value.getFullYear(),
-            value.getMonth(),
-            value.getDate(),
-            value.getHours(),
-            value.getMinutes(),
-            value.getSeconds()
-        ));
-    }
+    const [datePart, timePart] = value.split(' ');
+    if (!datePart) return null;
 
-    // --- CASE 3: String Parsing ("DD/MM/YYYY HH:mm:ss") ---
-    if (typeof value === 'string') {
-        const [datePart, timePart] = value.split(' ');
-        if (!datePart) return null;
+    const [day, month, year] = datePart.split('/').map(Number);
+    const [hour = 0, minute = 0, second = 0] =
+      timePart?.split(':').map(Number) ?? [];
 
-        const [day, month, year] = datePart.split('/').map(num => parseInt(num));
-        const [hour, minute, second] = timePart 
-            ? timePart.split(':').map(num => parseInt(num)) 
-            : [0, 0, 0];
+    return new Date(
+      Date.UTC(year, month - 1, day, hour, minute, second) - WIB_OFFSET
+    );
+  }
 
-        // Create the date strictly in UTC
-        return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-    }
-
-    return null;
+  return null;
 }
+
 
   // --- HELPER: Parse Int/Float safely ---
   static parseNumber(value: any): number | null {

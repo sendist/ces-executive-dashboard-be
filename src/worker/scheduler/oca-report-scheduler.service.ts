@@ -18,17 +18,22 @@ export class OcaReportSchedulerService {
   async handleScheduledReport() {
     this.logger.log('Starting scheduled OCA Report process...');
 
-    try {
-      // 1. Calculate Date Ranges (Today-1 and 7 days before)
-      const endDate = moment()
-        .tz('Asia/Jakarta')
-        .subtract(1, 'days')
-        .format('YYYY-MM-DD');
-      const startDate = moment()
-        .tz('Asia/Jakarta')
-        .subtract(8, 'days')
-        .format('YYYY-MM-DD');
+    // 1. Calculate Date Ranges (Today-1 and 7 days before)
+    const endDate = moment()
+      .tz('Asia/Jakarta')
+      .subtract(1, 'days')
+      .format('YYYY-MM-DD');
+    const startDate = moment()
+      .tz('Asia/Jakarta')
+      .subtract(8, 'days')
+      .format('YYYY-MM-DD');
 
+    return this.processOcaReport(startDate, endDate);
+  }
+
+  async processOcaReport(startDate: string, endDate: string) {
+    this.logger.log(`Processing OCA Report from ${startDate} to ${endDate}...`);
+    try {
       // 2. Request Report Generation
       const documentId = await this.requestReportGeneration(startDate, endDate);
 
@@ -39,11 +44,12 @@ export class OcaReportSchedulerService {
       const filePath = await this.downloadFile(downloadUrl);
 
       // 5. Add to your existing BullMQ Queue
-      await this.excelQueue.add('process-oca-report', {
+      const job = await this.excelQueue.add('process-oca-report', {
         path: filePath,
         filename: path.basename(filePath),
       });
-
+      
+      return { success: true, jobId: job.id, filePath };
       this.logger.log(`Successfully queued report for processing: ${filePath}`);
     } catch (error) {
       this.logger.error('Failed to process scheduled OCA report', error.stack);

@@ -22,7 +22,7 @@ export class OcaUpsertService {
     if (cleanRows.length === 0) return;
 
     // 2. BUILD SQL VALUES (Order must match INSERT columns below)
-    const values = cleanRows
+    const values = rows
       .map((row) => {
         return `(
         ${ExcelUtils.formatSqlValue(row.ticketNumber)},
