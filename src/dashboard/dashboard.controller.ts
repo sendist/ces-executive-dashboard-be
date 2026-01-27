@@ -82,6 +82,10 @@ export class DashboardController {
   getItEscalation (@Query() query: PaginationDto) {
     return this.ocaService.getItEscalation(query);
   }
-  
+
+  @Get('csat-score')
+  getCsatScore (@Query() filter: DashboardFilterDto) {
+    return this.ocaService.getCsatScore(filter);
+  }
 
 }

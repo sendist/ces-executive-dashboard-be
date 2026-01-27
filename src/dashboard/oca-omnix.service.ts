@@ -146,14 +146,57 @@ ORDER BY 1 ASC;
         filter.endDate,
       ),
     ]);
+    const [csatScore] = await this.getCsatScore(filter);
 
     // 3. RETURN COMBINED RESPONSE
     return {
       ...summaryResult[0], // Spread summary metrics (totalTickets, etc.)
       dailyTrend: dailyResult,
       hourlyTrend: hourlyResult,
+      csatScore,
     };
   }
+  
+async getCsatScore(filter: DashboardFilterDto) {
+  const { endDate } = filter;
+
+  const csatScore = await this.prisma.$queryRaw<any[]>`
+  WITH DailyAggregates AS (
+    SELECT 
+      DATE("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') AS date,
+      COUNT(*)::int AS totalSurvey,
+      COUNT(CASE WHEN "answeredAt" IS NOT NULL THEN 1 END)::int AS totalDijawab,
+      COUNT(CASE WHEN "numeric" >= 4 THEN 1 END)::int AS totalJawaban45
+    FROM "RawCsat"
+    WHERE "createdAt" >= (${endDate}::timestamp - INTERVAL '1 day')
+      AND "createdAt" < (${endDate}::timestamp)
+    GROUP BY DATE("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta')
+  )
+  SELECT
+    date,
+    totalSurvey,
+    totalDijawab,
+    totalJawaban45,
+    CASE 
+      WHEN totalDijawab = 0 THEN 0
+      ELSE (totalJawaban45::float / totalDijawab::float) * 5
+    END AS scoreCsat,
+    CASE 
+      WHEN totalDijawab = 0 THEN 0
+      ELSE (totalJawaban45::float / totalDijawab::float) * 100
+    END AS persenCsat
+  FROM DailyAggregates;
+`;
+
+csatScore.forEach(row => {
+  for (const [key, value] of Object.entries(row)) {
+    console.log(key, typeof value, value);
+  }
+});
+
+return csatScore;
+
+}
 
   // ---------------------------------------------------------
   // 2. CHANNEL BREAKDOWN (The Complex Pivot)
