@@ -472,10 +472,14 @@ ORDER BY 1 ASC;
       ),
     ]);
 
-    return { stats: stats[0] || { openTickets: 0, over3h: 0 }, topCorps, topKips };
+    return {
+      stats: stats[0] || { openTickets: 0, over3h: 0 },
+      topCorps,
+      topKips,
+    };
   }
 
- async getTopKipPerCompany(query: PaginationDto) {
+  async getTopKipPerCompany(query: PaginationDto) {
     const { page, limit, search, startDate, endDate } = query;
     // Default values if not provided
     const pageVal = page ? page : 1;
@@ -557,23 +561,23 @@ ORDER BY 1 ASC;
 
     // Run Count and Data queries in parallel for performance
     const [totalResult, companies] = await Promise.all([
-        this.prisma.$queryRawUnsafe<any[]>(countQuery, ...queryParams),
-        this.prisma.$queryRawUnsafe<any[]>(companyQuery, ...queryParams)
+      this.prisma.$queryRawUnsafe<any[]>(countQuery, ...queryParams),
+      this.prisma.$queryRawUnsafe<any[]>(companyQuery, ...queryParams),
     ]);
 
     const totalRows = totalResult[0]?.total || 0;
 
     // Handle empty case
     if (companies.length === 0) {
-        return {
-            data: [],
-            meta: {
-                page: Number(pageVal),
-                limit: Number(limitVal),
-                total: Number(totalRows),
-                totalPages: 0
-            }
-        };
+      return {
+        data: [],
+        meta: {
+          page: Number(pageVal),
+          limit: Number(limitVal),
+          total: Number(totalRows),
+          totalPages: 0,
+        },
+      };
     }
 
     // ---------------------------------------------------------
@@ -606,39 +610,39 @@ ORDER BY 1 ASC;
     `;
 
     const kips = await this.prisma.$queryRawUnsafe<any[]>(
-        kipsQuery,
-        ...kipsParams,
+      kipsQuery,
+      ...kipsParams,
     );
 
     // ---------------------------------------------------------
     // STEP 3: Map Results & Return with Meta
     // ---------------------------------------------------------
     const mappedData = companies.map((comp) => {
-        return {
-            company: comp.nama_perusahaan,
-            totalTickets: comp.total_tickets,
-            companySla: comp.company_sla,
-            topKips: kips
-                .filter((k) => k.nama_perusahaan === comp.nama_perusahaan)
-                .map((k) => ({
-                    detail_category: k.detail_category,
-                    kip_count: k.kip_count,
-                    kip_sla: k.kip_sla,
-                    rn: k.rn,
-                })),
-        };
+      return {
+        company: comp.nama_perusahaan,
+        totalTickets: comp.total_tickets,
+        companySla: comp.company_sla,
+        topKips: kips
+          .filter((k) => k.nama_perusahaan === comp.nama_perusahaan)
+          .map((k) => ({
+            detail_category: k.detail_category,
+            kip_count: k.kip_count,
+            kip_sla: k.kip_sla,
+            rn: k.rn,
+          })),
+      };
     });
 
     return {
-        data: mappedData,
-        meta: {
-            page: Number(pageVal),
-            limit: Number(limitVal),
-            total: Number(totalRows),
-            totalPages: Math.ceil(Number(totalRows) / Number(limitVal))
-        }
+      data: mappedData,
+      meta: {
+        page: Number(pageVal),
+        limit: Number(limitVal),
+        total: Number(totalRows),
+        totalPages: Math.ceil(Number(totalRows) / Number(limitVal)),
+      },
     };
-}
+  }
 
   // ---------------------------------------------------------
   // 6. PRODUCT BREAKDOWN (Connectivity, Solution, etc)
@@ -788,5 +792,321 @@ ORDER BY 1 ASC;
     );
 
     return detailed;
+  }
+
+  // ---------------------------------------------------------
+  // 7. EBO ESCALATION (Filtered by eskalasi = 'EBO' with WIB Conversion)
+  // ---------------------------------------------------------
+  async getEboOrGtmEscalation(query: PaginationDto, eskalasi) {
+    const { page = 1, limit = 10, search, startDate, endDate } = query;
+    const skip = (page - 1) * limit;
+
+    const whereClause: Prisma.RawOcaWhereInput = {
+      eskalasi: eskalasi,
+      ticketCreated: {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      },
+      NOT: {
+        OR: [
+          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
+          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+        ],
+      },
+      ...(search && {
+        OR: [
+          { ticketNumber: { contains: search, mode: 'insensitive' } },
+          { projectId: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [summaryRaw, totalItems, rawData] = await Promise.all([
+      // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
+      this.prisma.$queryRaw<any[]>`
+        SELECT 
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          -- Convert UTC to WIB before calculating if it's over 3H
+          COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
+                                 ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
+                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+        FROM "RawOca"
+        WHERE "eskalasi" = ${eskalasi}
+          AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
+      `,
+
+      this.prisma.rawOca.count({ where: whereClause }),
+
+      this.prisma.rawOca.findMany({
+        where: whereClause,
+        select: {
+          ticketCreated: true, // Prisma returns this as a UTC Date object
+          ticketNumber: true,
+          projectId: true,
+          resolveTime: true,
+        },
+        skip: Number(skip),
+        take: Number(limit),
+        orderBy: { ticketCreated: 'desc' },
+      }),
+    ]);
+
+    const summary = summaryRaw[0] || { totalOpen: 0, over3H: 0 };
+
+    const data = rawData.map((item) => {
+      // 1. Convert UTC Date to WIB (UTC + 7)
+      const wibOffset = 7 * 60 * 60 * 1000;
+      const ticketWib = item.ticketCreated
+        ? new Date(item.ticketCreated.getTime() + wibOffset)
+        : null;
+      const resolveWib = item.resolveTime
+        ? new Date(item.resolveTime.getTime() + wibOffset)
+        : null;
+
+      // 2. Format Duration
+      let durationStr = '00:00:00';
+      if (item.resolveTime && item.ticketCreated) {
+        const diffMs =
+          item.resolveTime.getTime() - item.ticketCreated.getTime();
+        const hrs = Math.floor(diffMs / 3600000);
+        const mins = Math.floor((diffMs % 3600000) / 60000);
+        const secs = Math.floor((diffMs % 60000) / 1000);
+        durationStr = `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+
+      return {
+        // 3. Display date in WIB format: DD/MM
+        date: ticketWib
+          ? ticketWib.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              timeZone: 'UTC',
+            })
+          : '',
+        idTicket: item.ticketNumber,
+        idCase: item.projectId,
+        duration: durationStr,
+        actName: item.projectId,
+        unitId: item.projectId,
+      };
+    });
+
+    return {
+      summary: {
+        totalOpen: summary.totalOpen,
+        over3H: summary.over3H,
+      },
+      data,
+      meta: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalItems / (limit || 10)),
+        totalItems: totalItems,
+      },
+    };
+  }
+
+   // ---------------------------------------------------------
+  // 8. Billco ESCALATION (Filtered by eskalasi = 'Billco' with WIB Conversion)
+  // ---------------------------------------------------------
+  async getBillcoEscalation(query: PaginationDto) {
+    const { page = 1, limit = 10, search, startDate, endDate } = query;
+    const skip = (page - 1) * limit;
+
+    const whereClause: Prisma.RawOcaWhereInput = {
+      eskalasi: 'Billco',
+      ticketCreated: {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      },
+      NOT: {
+        OR: [
+          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
+          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+        ],
+      },
+      ...(search && {
+        OR: [
+          { ticketNumber: { contains: search, mode: 'insensitive' } },
+          { projectId: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [summaryRaw, totalItems, rawData] = await Promise.all([
+      // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
+      this.prisma.$queryRaw<any[]>`
+        SELECT 
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          -- Convert UTC to WIB before calculating if it's over 3H
+          COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
+                                 ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
+                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+        FROM "RawOca"
+        WHERE "eskalasi" = 'Billco'
+          AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
+      `,
+
+      this.prisma.rawOca.count({ where: whereClause }),
+
+      this.prisma.rawOca.findMany({
+        where: whereClause,
+        select: {
+          ticketCreated: true, // Prisma returns this as a UTC Date object
+          ticketNumber: true,
+          detailCategory: true,
+          namaPerusahaan: true,
+        },
+        skip: Number(skip),
+        take: Number(limit),
+        orderBy: { ticketCreated: 'desc' },
+      }),
+    ]);
+
+    const summary = summaryRaw[0] || { totalOpen: 0, over3H: 0 };
+
+    const data = rawData.map((item) => {
+      // 1. Convert UTC Date to WIB (UTC + 7)
+      const wibOffset = 7 * 60 * 60 * 1000;
+      const ticketWib = item.ticketCreated
+        ? new Date(item.ticketCreated.getTime() + wibOffset)
+        : null;
+
+      return {
+        // 3. Display date in WIB format: DD/MM
+        date: ticketWib
+          ? ticketWib.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              timeZone: 'UTC',
+            })
+          : '',
+        idTicket: item.ticketNumber,
+        kip: item.detailCategory,
+        lob: item.namaPerusahaan,
+      };
+    });
+
+    return {
+      summary: {
+        totalOpen: summary.totalOpen,
+        over3H: summary.over3H,
+      },
+      data,
+      meta: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalItems / (limit || 10)),
+        totalItems: totalItems,
+      },
+    };
+  }
+
+  
+  // ---------------------------------------------------------
+  // 8. Billco ESCALATION (Filtered by eskalasi = 'Billco' with WIB Conversion)
+  // ---------------------------------------------------------
+  async getItEscalation(query: PaginationDto) {
+    const { page = 1, limit = 10, search, startDate, endDate } = query;
+    const skip = (page - 1) * limit;
+
+    const whereClause: Prisma.RawOcaWhereInput = {
+      eskalasi: 'IT',
+      ticketCreated: {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      },
+      NOT: {
+        OR: [
+          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
+          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+        ],
+      },
+      ...(search && {
+        OR: [
+          { ticketNumber: { contains: search, mode: 'insensitive' } },
+          { projectId: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [summaryRaw, totalItems, rawData] = await Promise.all([
+      // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
+      this.prisma.$queryRaw<any[]>`
+        SELECT 
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          -- Convert UTC to WIB before calculating if it's over 3H
+          COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
+                                 ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
+                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+        FROM "RawOca"
+        WHERE "eskalasi" = 'IT'
+          AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
+      `,
+
+      this.prisma.rawOca.count({ where: whereClause }),
+
+      this.prisma.rawOca.findMany({
+        where: whereClause,
+        select: {
+          ticketCreated: true, // Prisma returns this as a UTC Date object
+          ticketNumber: true,
+          idRemedyNo: true,
+          resolveTime: true,
+        },
+        skip: Number(skip),
+        take: Number(limit),
+        orderBy: { ticketCreated: 'desc' },
+      }),
+    ]);
+
+    const summary = summaryRaw[0] || { totalOpen: 0, over3H: 0 };
+
+    const data = rawData.map((item) => {
+      // 1. Convert UTC Date to WIB (UTC + 7)
+      const wibOffset = 7 * 60 * 60 * 1000;
+      const ticketWib = item.ticketCreated
+        ? new Date(item.ticketCreated.getTime() + wibOffset)
+        : null;
+      const resolveWib = item.resolveTime
+        ? new Date(item.resolveTime.getTime() + wibOffset)
+        : null;
+
+      // 2. Format Duration
+      let durationStr = '00:00:00';
+      if (item.resolveTime && item.ticketCreated) {
+        const diffMs =
+          item.resolveTime.getTime() - item.ticketCreated.getTime();
+        const hrs = Math.floor(diffMs / 3600000);
+        const mins = Math.floor((diffMs % 3600000) / 60000);
+        const secs = Math.floor((diffMs % 60000) / 1000);
+        durationStr = `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+
+      return {
+        // 3. Display date in WIB format: DD/MM
+        date: ticketWib
+          ? ticketWib.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              timeZone: 'UTC',
+            })
+          : '',
+        idTicket: item.ticketNumber,
+        idRemedy: item.idRemedyNo,
+        duration: durationStr,
+      };
+    });
+
+    return {
+      summary: {
+        totalOpen: summary.totalOpen,
+        over3H: summary.over3H,
+      },
+      data,
+      meta: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalItems / (limit || 10)),
+        totalItems: totalItems,
+      },
+    };
   }
 }

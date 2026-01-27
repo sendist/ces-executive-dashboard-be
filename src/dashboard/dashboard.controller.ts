@@ -62,4 +62,26 @@ export class DashboardController {
   getProducts(@Query() filter: DashboardFilterDto) {
       return this.ocaService.getProductBreakdown(filter);
   }
+
+  @Get('ebo-escalation')
+  getEboEscalation (@Query() query: PaginationDto) {
+    return this.ocaService.getEboOrGtmEscalation(query, 'EBO');
+  }
+
+  @Get('gtm-escalation')
+  getGtmEscalation (@Query() query: PaginationDto) {
+    return this.ocaService.getEboOrGtmEscalation(query, 'GTM');
+  }
+
+  @Get('billco-escalation')
+  getBillcoEscalation (@Query() query: PaginationDto) {
+    return this.ocaService.getBillcoEscalation(query);
+  }
+
+  @Get('it-escalation')
+  getItEscalation (@Query() query: PaginationDto) {
+    return this.ocaService.getItEscalation(query);
+  }
+  
+
 }
