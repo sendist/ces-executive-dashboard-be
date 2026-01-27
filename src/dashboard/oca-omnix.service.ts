@@ -147,6 +147,7 @@ ORDER BY 1 ASC;
       ),
     ]);
     const [csatScore] = await this.getCsatScore(filter);
+    const priority = await this.getPriorityData(filter);
 
     // 3. RETURN COMBINED RESPONSE
     return {
@@ -154,7 +155,30 @@ ORDER BY 1 ASC;
       dailyTrend: dailyResult,
       hourlyTrend: hourlyResult,
       csatScore,
+      priority,
     };
+  }
+
+  async getPriorityData(filter: DashboardFilterDto) {
+    const {startDate, endDate} = filter;
+
+    const [priorityData] = await this.prisma.$queryRaw<any[]>`
+   SELECT
+    count(*) filter(where priority = 'High' and "isVip")::int as vip,
+    count(*) filter(where priority = 'High' and "isVip")::int as urgent,
+    count(*) filter(where priority = 'High' and "isPareto")::int as pareto,
+    count(*) filter(where priority = 'High' and (roaming <> '' and roaming <> '-' and roaming notnull))::int as roaming,
+    count(*) filter(where priority = 'High' and "sub_category" ILIKE '%EKSTRA KUOTA%')::int as extra
+
+    from "RawOca" 
+    WHERE "ticket_created" >= ${startDate}::timestamptz 
+      AND "ticket_created" < ${endDate}::timestamptz
+      AND "statusTiket"
+      AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved')
+      
+    `;
+
+    return priorityData;
   }
   
 async getCsatScore(filter: DashboardFilterDto) {

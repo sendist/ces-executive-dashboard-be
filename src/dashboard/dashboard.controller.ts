@@ -1,4 +1,10 @@
-import { Controller, Get, Query, UseGuards, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { DashboardFilterDto, PaginationDto } from './dto/dashboard-filter.dto';
 import { OcaService } from './oca.service';
@@ -14,20 +20,21 @@ export class DashboardController {
     private readonly ocaService: OcaOmnixService,
   ) {}
 
-//   // Endpoint 1: Get the daily breakdown (for charts)
-//   // Usage: GET /dashboard/trend?startDate=2025-01-01&endDate=2025-01-31
-//   @Get('trend')
-//   async getDailyTrend(@Query(new ValidationPipe({ transform: true })) filter: DashboardFilterDto) {
-//     return this.dashboardService.getDailyTrend(filter);
-//   }
+  //   // Endpoint 1: Get the daily breakdown (for charts)
+  //   // Usage: GET /dashboard/trend?startDate=2025-01-01&endDate=2025-01-31
+  //   @Get('trend')
+  //   async getDailyTrend(@Query(new ValidationPipe({ transform: true })) filter: DashboardFilterDto) {
+  //     return this.dashboardService.getDailyTrend(filter);
+  //   }
 
   // Endpoint 2: Get the single summary block (aggregated math)
   // Usage: GET /dashboard/summary?startDate=2025-01-01&endDate=2025-01-31
   @Get('summarycsat')
-  async getSummaryDashboard(@Query(new ValidationPipe({ transform: true })) filter: DashboardFilterDto) {
+  async getSummaryDashboard(
+    @Query(new ValidationPipe({ transform: true })) filter: DashboardFilterDto,
+  ) {
     return this.dashboardService.getSummary(filter);
   }
-
 
   @Get('summary')
   getSummary(@Query() filter: DashboardFilterDto) {
@@ -47,45 +54,49 @@ export class DashboardController {
   @Get('vip-pareto')
   async getVipPareto(@Query() filter: DashboardFilterDto) {
     const [vip, pareto] = await Promise.all([
-        this.ocaService.getSpecialAccountStats(filter, 'VIP'),
-        this.ocaService.getSpecialAccountStats(filter, 'PARETO')
+      this.ocaService.getSpecialAccountStats(filter, 'VIP'),
+      this.ocaService.getSpecialAccountStats(filter, 'PARETO'),
     ]);
     return { vip, pareto };
   }
-  
+
   @Get('company-kips')
   getCompanyKips(@Query() filter: PaginationDto) {
-      return this.ocaService.getTopKipPerCompany(filter);
+    return this.ocaService.getTopKipPerCompany(filter);
   }
-  
+
   @Get('products')
   getProducts(@Query() filter: DashboardFilterDto) {
-      return this.ocaService.getProductBreakdown(filter);
+    return this.ocaService.getProductBreakdown(filter);
   }
 
   @Get('ebo-escalation')
-  getEboEscalation (@Query() query: PaginationDto) {
+  getEboEscalation(@Query() query: PaginationDto) {
     return this.ocaService.getEboOrGtmEscalation(query, 'EBO');
   }
 
   @Get('gtm-escalation')
-  getGtmEscalation (@Query() query: PaginationDto) {
+  getGtmEscalation(@Query() query: PaginationDto) {
     return this.ocaService.getEboOrGtmEscalation(query, 'GTM');
   }
 
   @Get('billco-escalation')
-  getBillcoEscalation (@Query() query: PaginationDto) {
+  getBillcoEscalation(@Query() query: PaginationDto) {
     return this.ocaService.getBillcoEscalation(query);
   }
 
   @Get('it-escalation')
-  getItEscalation (@Query() query: PaginationDto) {
+  getItEscalation(@Query() query: PaginationDto) {
     return this.ocaService.getItEscalation(query);
   }
 
   @Get('csat-score')
-  getCsatScore (@Query() filter: DashboardFilterDto) {
+  getCsatScore(@Query() filter: DashboardFilterDto) {
     return this.ocaService.getCsatScore(filter);
   }
 
+  @Get('priority')
+  getPriority(@Query() filter: DashboardFilterDto) {
+    return this.ocaService.getPriorityData(filter);
+  }
 }
