@@ -12,34 +12,32 @@ import { OcaTicketSchedulerService } from './worker/scheduler/oca-ticket-schedul
 import { DailyOcaTicketProcessor } from './worker/processor/daily-oca-ticket-processor';
 import { OcaUpsertService } from './worker/repository/oca-upsert.service';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { IncidentModule } from './modules/incident/incident.module';
 
 @Module({
   imports: [
     // 1. Enable Scheduling
     ScheduleModule.forRoot(),
-    
+
     BullModule.forRoot({
-    connection: process.env.REDIS_URL
-    ? {
-        url: process.env.REDIS_URL,
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-      }
-    : {
-        host: process.env.REDIS_HOST,
-        port: Number(process.env.REDIS_PORT),
-      },
+      connection: process.env.REDIS_URL
+        ? {
+            url: process.env.REDIS_URL,
+            maxRetriesPerRequest: null,
+            enableReadyCheck: false,
+          }
+        : {
+            host: process.env.REDIS_HOST,
+            port: Number(process.env.REDIS_PORT),
+          },
     }),
-
-
     HttpModule,
-
     AuthModule,
-    
     PrismaModule,
     UploadModule,
     DashboardModule,
     SchedulerModule,
+    IncidentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -334,3 +334,12 @@ model OcaDailySync {
   lastSync  DateTime
   createdAt DateTime @default(now())
 }
+
+model IncidentReport {
+  id          Int   @id @default(autoincrement())
+  title       String?
+  isActive    Boolean?
+  description String?
+  createdAt   DateTime @default(now())
+  solvedAt    DateTime?
+}
