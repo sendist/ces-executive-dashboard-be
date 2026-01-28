@@ -328,3 +328,9 @@ model AccountMapping {
   @@index([corporateName])
   @@index([kategoriAccount])
 }
+
+model OcaDailySync {
+  id        Int      @id @default(autoincrement())
+  lastSync  DateTime
+  createdAt DateTime @default(now())
+}

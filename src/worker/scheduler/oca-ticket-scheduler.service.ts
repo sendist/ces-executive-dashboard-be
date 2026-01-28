@@ -5,12 +5,16 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import axios from 'axios';
 import moment from 'moment';
+import { PrismaService } from 'prisma/prisma.service';
 
 @Injectable()
 export class OcaTicketSchedulerService {
   private readonly logger = new Logger(OcaTicketSchedulerService.name);
 
-  constructor(@InjectQueue('ticket-processing') private ticketQueue: Queue) {}
+  constructor(
+    @InjectQueue('ticket-processing') private ticketQueue: Queue,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // Run every 10 minutes
   @Cron(CronExpression.EVERY_HOUR)
@@ -88,7 +92,26 @@ export class OcaTicketSchedulerService {
         page++;
       }
     }
+
+    // Save last sync to Postgres
+    const now = new Date();
+    const lastSyncWib = now
+      ? moment(now).tz('Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss')
+      : null;
+    await this.prisma.ocaDailySync.upsert({
+      where: { id: 1 }, // Always keep one row
+      update: { lastSync: now },
+      create: { id: 1, lastSync: now },
+    });
+
     this.logger.log('Ticket sync process completed.');
-    return { lastJob };
+    return { lastJob, lastSync: lastSyncWib };
+  }
+
+  async getLastSyncTime() {
+    const record = await this.prisma.ocaDailySync.findUnique({
+      where: { id: 1 },
+    });
+    return record?.lastSync ?? null;
   }
 }

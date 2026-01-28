@@ -93,11 +93,21 @@ export class ScheduleController {
 
   @Post('sync-daily-oca')
   async syncDailyOca() {
-    const { lastJob } = await this.ocaTicketSchedulerService.handleCron();
+    const { lastJob, lastSync } = await this.ocaTicketSchedulerService.handleCron();
 
     return {
       message: 'All ticket batches have been queued.',
       jobId: lastJob,
+      lastSync: lastSync,
     };
+  }
+
+  @Get('last-sync')
+  async getLastSync() {
+    const lastSyncUtc = await this.ocaTicketSchedulerService.getLastSyncTime();
+    const lastSyncWib = lastSyncUtc
+      ? moment(lastSyncUtc).tz('Asia/Jakarta').format('YYYY-MM-DD HH:mm:ss')
+      : null;
+    return { lastSyncWib };
   }
 }
