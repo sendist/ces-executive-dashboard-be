@@ -53,14 +53,14 @@ export class OcaOmnixService {
             COUNT(*) FILTER (
                 WHERE "statusTiket"
                 AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
-                AND NOT ("last_status" ILIKE ANY (ARRAY['closed', 'resolved']))
+                AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
             )::int AS "totalOpen",
 
             -- totalClosed: filtered by channel + status
             COUNT(*) FILTER (
                 WHERE "statusTiket"
                 AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
-                AND "last_status" ILIKE ANY (ARRAY['closed', 'resolved'])
+                AND ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
             )::int AS "totalClosed",
 
             -- SLA percentage: filtered by channel
@@ -135,7 +135,7 @@ SELECT
     
     COUNT(*)::int AS created,
     
-    COUNT(*) FILTER (WHERE last_status ILIKE ANY (ARRAY['closed','resolved']))::int AS solved
+    COUNT(*) FILTER (WHERE ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int AS solved
 
 FROM "UnifiedTickets"
 WHERE ticket_timestamp >= ($1::date - INTERVAL '7 hours')  -- 00:00 WIB → UTC
@@ -160,7 +160,7 @@ ORDER BY 1 ASC;
   }
 
   async getPriorityData(filter: DashboardFilterDto) {
-    const {startDate, endDate} = filter;
+    const { startDate, endDate } = filter;
 
     const [priorityData] = await this.prisma.$queryRaw<any[]>`
    SELECT
@@ -174,17 +174,17 @@ ORDER BY 1 ASC;
     WHERE "ticket_created" >= ${startDate}::timestamptz 
       AND "ticket_created" < ${endDate}::timestamptz
       AND "statusTiket"
-      AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved')
+      AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
       
     `;
 
     return priorityData;
   }
-  
-async getCsatScore(filter: DashboardFilterDto) {
-  const { endDate } = filter;
 
-  const csatScore = await this.prisma.$queryRaw<any[]>`
+  async getCsatScore(filter: DashboardFilterDto) {
+    const { endDate } = filter;
+
+    const csatScore = await this.prisma.$queryRaw<any[]>`
   WITH DailyAggregates AS (
     SELECT 
       DATE("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') AS date,
@@ -212,15 +212,14 @@ async getCsatScore(filter: DashboardFilterDto) {
   FROM DailyAggregates;
 `;
 
-csatScore.forEach(row => {
-  for (const [key, value] of Object.entries(row)) {
-    console.log(key, typeof value, value);
+    csatScore.forEach((row) => {
+      for (const [key, value] of Object.entries(row)) {
+        console.log(key, typeof value, value);
+      }
+    });
+
+    return csatScore;
   }
-});
-
-return csatScore;
-
-}
 
   // ---------------------------------------------------------
   // 2. CHANNEL BREAKDOWN (The Complex Pivot)
@@ -266,12 +265,12 @@ return csatScore;
              ELSE 0 END as "pctSla",
 
         -- Basic Counts
-        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved') AND "statusTiket" = true)::int as "open",
-        COUNT(*) FILTER (WHERE ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved')  AND "statusTiket" = true)::int as "closed",
+        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%') AND "statusTiket" = true)::int as "open",
+        COUNT(*) FILTER (WHERE ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')  AND "statusTiket" = true)::int as "closed",
 
         -- Product Specifics
-        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved') AND "product" = 'CONNECTIVITY')::int as "connOpen",
-        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved') AND "product" = 'SOLUTION')::int as "solOpen",
+        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%') AND "product" = 'CONNECTIVITY')::int as "connOpen",
+        COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%') AND "product" = 'SOLUTION')::int as "solOpen",
         
         -- Resolve Time Logic
         COUNT(*) FILTER (WHERE "product" = 'CONNECTIVITY' AND ("resolve_time" - "ticket_created") > interval '3 hours')::int as "connOver3h",
@@ -486,7 +485,7 @@ return csatScore;
             SELECT 
                     COUNT(*) FILTER (
         WHERE "statusTiket"
-          AND NOT ("last_status" ILIKE ANY (ARRAY['closed','resolved']))
+          AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
     )::int AS "openTickets",
                 COUNT(*) FILTER (WHERE ("resolve_time" - "ticket_created") > interval '3 hours')::int as "over3h"
             FROM "UnifiedSpecial"
@@ -780,7 +779,7 @@ return csatScore;
         SELECT 
             "product",
             COUNT(*)::int as "total",
-            COUNT(*) FILTER (WHERE "last_status" = 'Open')::int as "open",
+            COUNT(*) FILTER (WHERE NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "open",
             COUNT(*) FILTER (WHERE ("resolve_time" - "ticket_created") > interval '3 hours')::int as "over3h",
             CASE WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 
                  THEN ROUND(
@@ -876,8 +875,8 @@ return csatScore;
       },
       NOT: {
         OR: [
-          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
-          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'close', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'resolve', mode: 'insensitive' } },
         ],
       },
       ...(search && {
@@ -892,11 +891,11 @@ return csatScore;
       // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
       this.prisma.$queryRaw<any[]>`
         SELECT 
-          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "totalOpen",
           -- Convert UTC to WIB before calculating if it's over 3H
           COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
                                  ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
-                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+                                 AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "over3H"
         FROM "RawOca"
         WHERE "eskalasi" = ${eskalasi}
           AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
@@ -972,7 +971,7 @@ return csatScore;
     };
   }
 
-   // ---------------------------------------------------------
+  // ---------------------------------------------------------
   // 8. Billco ESCALATION (Filtered by eskalasi = 'Billco' with WIB Conversion)
   // ---------------------------------------------------------
   async getBillcoEscalation(query: PaginationDto) {
@@ -987,8 +986,8 @@ return csatScore;
       },
       NOT: {
         OR: [
-          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
-          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'close', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'resolve', mode: 'insensitive' } },
         ],
       },
       ...(search && {
@@ -1003,11 +1002,11 @@ return csatScore;
       // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
       this.prisma.$queryRaw<any[]>`
         SELECT 
-          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "totalOpen",
           -- Convert UTC to WIB before calculating if it's over 3H
           COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
                                  ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
-                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+                                 AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "over3H"
         FROM "RawOca"
         WHERE "eskalasi" = 'Billco'
           AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
@@ -1067,7 +1066,6 @@ return csatScore;
     };
   }
 
-  
   // ---------------------------------------------------------
   // 8. Billco ESCALATION (Filtered by eskalasi = 'Billco' with WIB Conversion)
   // ---------------------------------------------------------
@@ -1083,8 +1081,8 @@ return csatScore;
       },
       NOT: {
         OR: [
-          { lastStatus: { equals: 'Closed', mode: 'insensitive' } },
-          { lastStatus: { equals: 'resolved', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'close', mode: 'insensitive' } },
+          { lastStatus: { startsWith: 'resolve', mode: 'insensitive' } },
         ],
       },
       ...(search && {
@@ -1099,11 +1097,11 @@ return csatScore;
       // A. Summary (Using PostgreSQL to handle timezone-aware interval calculation)
       this.prisma.$queryRaw<any[]>`
         SELECT 
-          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "totalOpen",
+          COUNT(*) FILTER (WHERE  NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "totalOpen",
           -- Convert UTC to WIB before calculating if it's over 3H
           COUNT(*) FILTER (WHERE ("resolve_time" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') - 
                                  ("ticket_created" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta') > interval '3 hours'
-                                 AND NOT ("last_status" ILIKE 'Closed' OR "last_status" ILIKE 'resolved'))::int as "over3H"
+                                 AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%'))::int as "over3H"
         FROM "RawOca"
         WHERE "eskalasi" = 'IT'
           AND "ticket_created" >= ${startDate}::timestamptz AND "ticket_created" < ${endDate}::timestamptz
