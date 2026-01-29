@@ -51,7 +51,7 @@ export class OcaTicketSchedulerService {
             //   values: ['form']
             // }
           ],
-          limit: 100, // Increase limit for batching
+          limit: 500, // Increase limit for batching
           page: page,
           search: {
             key: '',
@@ -62,25 +62,42 @@ export class OcaTicketSchedulerService {
       );
 
       const tickets = response.data.results.data;
-      // console.log(tickets);
+      const ticketNumbers = tickets.map((t) => t.ticket_number);
+
+      const dbRows = await this.prisma.$queryRaw<
+        { ticket_number: string; last_update: Date | null }[]
+      >`
+        SELECT "ticket_number", "last_update"
+        FROM "RawOca"
+        WHERE "ticket_number" = ANY(${ticketNumbers});
+`;
+      const dbMap = new Map(
+        dbRows.map((r) => [r.ticket_number, r.last_update?.getTime()]),
+      );
+
+      const ticketsToProcess = tickets.filter((t) => {
+        const dbLast = dbMap.get(t.ticket_number);
+        if (!dbLast) return true; // new ticket
+        return new Date(t.updated_at).getTime() > dbLast;
+      });
 
       // 3. Push to Queue
 
-      if (tickets.length > 0) {
+      if (ticketsToProcess.length > 0) {
         // 2. Push the WHOLE BATCH to the queue as ONE job
         // Generate a job ID based on the first+last ticket to avoid duplicates if needed
-        const batchId = `batch-${page}-${tickets[0].ticket_id}-${moment().unix()}`;
+        const batchId = `batch-${page}-${ticketsToProcess[0].ticket_id}-${moment().unix()}`;
 
         const job = await this.ticketQueue.add(
           'process-batch-tickets', // New job name
           {
-            tickets: tickets, // Payload is an ARRAY now
+            tickets: ticketsToProcess, // Payload is an ARRAY now
           },
           { jobId: batchId },
         );
 
         this.logger.log(
-          `Queued batch page ${page} with ${tickets.length} tickets, jobId: ${job.id}`,
+          `Queued batch page ${page} with ${ticketsToProcess.length} tickets, jobId: ${job.id}`,
         );
         lastJob = job?.id ?? '';
       }

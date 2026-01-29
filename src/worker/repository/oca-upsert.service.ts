@@ -1,11 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { ExcelUtils } from '../excel-utils.helper';
-import { calculateFcrStatus, calculateSlaStatus, determineEskalasi, TICKET_RULES } from "../utils/rules.constant";
-
+import {
+  calculateFcrStatus,
+  calculateSlaStatus,
+  determineEskalasi,
+  TICKET_RULES,
+} from '../utils/rules.constant';
 
 @Injectable()
 export class OcaUpsertService {
+  private readonly logger = new Logger(OcaUpsertService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async saveBatch(rows: any[]) {
@@ -86,6 +91,7 @@ export class OcaUpsertService {
 
     // 3. EXECUTE QUERY with SNAKE_CASE columns
     const query = `
+    WITH upsert AS(
 INSERT INTO "RawOca" (
     "ticket_number", "ticket_subject", "channel", "category", 
     "reporter", "assignee", "department", "priority", "last_status",
@@ -156,11 +162,25 @@ DO UPDATE SET
     "eskalasi"                    = EXCLUDED."eskalasi",
     "isVip"                       = EXCLUDED."isVip",
     "isPareto"                    = EXCLUDED."isPareto",
-    "updated_at_excel"            = EXCLUDED."updated_at_excel";
+    "updated_at_excel"            = EXCLUDED."updated_at_excel"
+    WHERE "RawOca"."last_update" IS DISTINCT FROM EXCLUDED."last_update"
+    RETURNING xmax
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE xmax = 0)::int AS inserted,
+      COUNT(*) FILTER (WHERE xmax <> 0)::int AS updated
+      FROM upsert;
     `;
 
-    await this.prisma.$executeRawUnsafe(query);
-  }
+    const result =
+      await this.prisma.$queryRawUnsafe<
+        { inserted: number; updated: number }[]
+      >(query);
 
-  
+    const { inserted, updated } = result[0];
+
+    this.logger.log(
+      `Oca Upsert completed: ${inserted} inserted, ${updated} updated`,
+    );
+  }
 }
