@@ -17,7 +17,7 @@ export class OcaTicketSchedulerService {
   ) {}
 
   // Run every 10 minutes
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(process.env.CRON_SYNC_DAILY_OCA ?? CronExpression.EVERY_30_MINUTES)
   async handleCron() {
     this.logger.debug('Starting ticket sync...');
 
