@@ -212,12 +212,6 @@ ORDER BY 1 ASC;
   FROM DailyAggregates;
 `;
 
-    csatScore.forEach((row) => {
-      for (const [key, value] of Object.entries(row)) {
-        console.log(key, typeof value, value);
-      }
-    });
-
     return csatScore;
   }
 
