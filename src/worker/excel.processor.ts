@@ -7,6 +7,7 @@ import { OmnixUploadService } from './services/omnix-upload.service';
 import { OcaUploadService } from './services/oca-upload.service';
 import * as fs from 'fs'; 
 import { Logger } from '@nestjs/common';
+import { AvayaUploadService } from './services/avaya-upload.service';
 
 @Processor('excel-queue')
 export class ExcelProcessor extends WorkerHost {
@@ -18,6 +19,7 @@ export class ExcelProcessor extends WorkerHost {
     private readonly callUploadService: CallUploadService,
     private readonly omnixUploadService: OmnixUploadService,
     private readonly ocaUploadService: OcaUploadService,
+    private readonly avayaUploadService: AvayaUploadService,
   ) {
     super();
   }
@@ -37,6 +39,8 @@ export class ExcelProcessor extends WorkerHost {
           return await this.callUploadService.process(job);
         case 'process-oca-report':
           return await this.ocaUploadService.process(job);
+        case 'process-avaya-report':
+          return await this.avayaUploadService.process(job);
         default:
           throw new Error(`Unknown job name: ${job.name}`);
       }

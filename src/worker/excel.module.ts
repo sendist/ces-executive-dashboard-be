@@ -10,6 +10,7 @@ import { OcaUploadService } from './services/oca-upload.service';
 import { OmnixUploadService } from './services/omnix-upload.service';
 import { OcaUpsertService } from './repository/oca-upsert.service';
 import { OcaReportSchedulerService } from './scheduler/oca-report-scheduler.service';
+import { AvayaUploadService } from './services/avaya-upload.service';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { OcaReportSchedulerService } from './scheduler/oca-report-scheduler.serv
     CsatUploadService,
     OcaUploadService,
     OmnixUploadService,
+    AvayaUploadService,
     PrismaService,
     OcaUpsertService,
     OcaReportSchedulerService,

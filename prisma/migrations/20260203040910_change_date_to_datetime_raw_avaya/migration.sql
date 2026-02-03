@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "raw_avaya" ALTER COLUMN "date" SET DATA TYPE TIMESTAMP(3);

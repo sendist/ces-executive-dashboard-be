@@ -1,4 +1,12 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Get, Param, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UseInterceptors,
+  UploadedFile,
+  Get,
+  Param,
+  NotFoundException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -9,9 +17,11 @@ export class UploadController {
   constructor(@InjectQueue('excel-queue') private excelQueue: Queue) {}
 
   @Post('csat-report')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: './uploads' }) // Save temp file
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({ destination: './uploads' }), // Save temp file
+    }),
+  )
   async uploadExcel(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
     const job = await this.excelQueue.add('process-csat-report', {
@@ -20,13 +30,18 @@ export class UploadController {
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'File CSAT report received. Processing started.', jobId: job.id };
+    return {
+      message: 'File CSAT report received. Processing started.',
+      jobId: job.id,
+    };
   }
 
   @Post('omnix-report')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: './uploads' }) // Save temp file
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({ destination: './uploads' }), // Save temp file
+    }),
+  )
   async uploadOmnixReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
     const job = await this.excelQueue.add('process-omnix-report', {
@@ -35,13 +50,18 @@ export class UploadController {
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'File Omnix report received. Processing started.', jobId: job.id };
+    return {
+      message: 'File Omnix report received. Processing started.',
+      jobId: job.id,
+    };
   }
 
   @Post('call-report')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: './uploads' }) // Save temp file
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({ destination: './uploads' }), // Save temp file
+    }),
+  )
   async uploadCallReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
     const job = await this.excelQueue.add('process-call-report', {
@@ -50,13 +70,40 @@ export class UploadController {
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'File Call report received. Processing started.', jobId: job.id, filename: file.filename };
+    return {
+      message: 'File Call report received. Processing started.',
+      jobId: job.id,
+      filename: file.filename,
+    };
+  }
+
+  @Post('avaya-report')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({ destination: './uploads' }), // Save temp file
+    }),
+  )
+  async uploadAvayaReport(@UploadedFile() file: Express.Multer.File) {
+    // 1. Send job to the queue immediately
+    const job = await this.excelQueue.add('process-avaya-report', {
+      path: file.path,
+      filename: file.originalname,
+    });
+
+    // 2. Return success immediately (User doesn't wait)
+    return {
+      message: 'File Call report received. Processing started.',
+      jobId: job.id,
+      filename: file.filename,
+    };
   }
 
   @Post('oca-report')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({ destination: './uploads' }) // Save temp file
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({ destination: './uploads' }), // Save temp file
+    }),
+  )
   async uploadOcaReport(@UploadedFile() file: Express.Multer.File) {
     // 1. Send job to the queue immediately
     const job = await this.excelQueue.add('process-oca-report', {
@@ -65,9 +112,11 @@ export class UploadController {
     });
 
     // 2. Return success immediately (User doesn't wait)
-    return { message: 'File OCA report received. Processing started.', jobId: job.id };
+    return {
+      message: 'File OCA report received. Processing started.',
+      jobId: job.id,
+    };
   }
-
 
   @Get('status/:jobId')
   async getJobStatus(@Param('jobId') jobId: string) {
@@ -85,14 +134,14 @@ export class UploadController {
       // 2. Return the data you returned from the processor
       return {
         status: 'completed',
-        result: job.returnvalue // This is your { stats: { inserted, updated } }
+        result: job.returnvalue, // This is your { stats: { inserted, updated } }
       };
     }
 
     if (isFailed) {
       return {
         status: 'failed',
-        error: job.failedReason
+        error: job.failedReason,
       };
     }
 
@@ -100,7 +149,7 @@ export class UploadController {
     // You can use job.progress if you implemented updateProgress inside the processor
     return {
       status: 'active',
-      progress: job.progress
+      progress: job.progress,
     };
   }
 }

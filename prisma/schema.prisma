@@ -1,10 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,11 +8,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum UserRole {
-  USER
-  ADMIN
-}
-
 model User {
   id           String   @id @default(uuid())
   name         String
@@ -28,302 +16,258 @@ model User {
   role         UserRole @default(USER)
   createdAt    DateTime @default(now())
 }
-        
-model RawCsat {
-  id              Int    @id @default(autoincrement())
-  interactionId   String   
-  createdAt       DateTime  
-  status          String?   
-  answeredAt      DateTime?
-  customer        String? 
-  ticketNumbers   String?   @db.Text
-  question1       String?
-  question2       String?
-  question3       String?
-  question4       String?
-  question5       String?
-  question6       String?
-  numeric         Int?     
-  channel         String?
-  assignedAgent   String?
 
-  @@index([createdAt])
+model RawCsat {
+  interactionId String
+  createdAt     DateTime
+  answeredAt    DateTime?
+  status        String?
+  ticketNumbers String?
+  assignedAgent String?
+  channel       String?
+  customer      String?
+  numeric       Int?
+  question1     String?
+  question2     String?
+  question3     String?
+  question4     String?
+  question5     String?
+  question6     String?
+  id            Int       @id @default(autoincrement())
+
   @@unique([createdAt, customer])
+  @@index([createdAt])
 }
 
 model DailyCsatStat {
-  id                Int      @id @default(autoincrement())
-  date              DateTime @unique
-  totalSurvey       Int      @default(0) // Count of all rows
-  totalDijawab      Int      @default(0) // Count where answeredAt is not null
-  totalJawaban45    Int      @default(0) // Count where numericScore >= 4
-  persenCsat        Float    @default(0) // (totalJawaban45 / totalDijawab) * 100
-  scoreCsat         Float    @default(0) // Average of numericScore
+  id             Int      @id @default(autoincrement())
+  date           DateTime @unique
+  totalSurvey    Int      @default(0)
+  totalDijawab   Int      @default(0)
+  totalJawaban45 Int      @default(0)
+  persenCsat     Float    @default(0)
+  scoreCsat      Float    @default(0)
 }
 
 model RawOmnix {
-  // Use a UUID for the row ID, as Excel imports might contain duplicate ticket_ids
-  id               Int      @id @default(autoincrement())
-
-  // --- IDs & Basic Info ---
-  ticketId         Int?     @unique @map("ticket_id")
-  remark           String?  @db.Text // Using Text because remarks can be very long
-  subject          String?  @db.Text
-  priorityId       Int?     @map("priority_id")
-  priorityName     String?  @map("priority_name")
-  ticketStatusId   Int?     @map("ticket_status_id")
-  ticketStatusName String?  @map("ticket_status_name")
-  unitId           Int?     @map("unit_id")
-  unitName         String?  @map("unit_name")
-
-  // --- People / Informants ---
-  // Using String for IDs because examples were quoted ('1670')
-  informantId    String? @map("informant_id")
-  informantName  String? @map("informant_name")
-  informantHp    String? @map("informant_hp")
-  informantEmail String? @map("informant_email")
-  customerId     String? @map("customer_id")
-  customerName   String? @map("customer_name")
-  customerHp     String? @map("customer_hp")
-  customerEmail  String? @map("customer_email")
-
-  // --- Dates (Interaction) ---
-  // Ensure your Processor converts "16.06.2025" to a valid Date object
-  dateOriginInteraction      DateTime? @map("date_origin_interaction")
-  dateStartInteraction       DateTime? @map("date_start_interaction")
-  dateOpen                   DateTime? @map("date_open")
-  dateClose                  DateTime? @map("date_close")
-  dateLastUpdate             DateTime? @map("date_last_update")
-  dateCreatedAt              DateTime? @map("date_created_at")
-  datePickupInteraction      DateTime? @map("date_pickup_interaction")
-  dateEndInteraction         DateTime? @map("date_end_interaction")
-  dateFirstPickupInteraction DateTime? @map("date_first_pickup_interaction")
+  id                           Int       @id @default(autoincrement())
+  ticketId                     Int?      @unique @map("ticket_id")
+  remark                       String?
+  subject                      String?
+  priorityId                   Int?      @map("priority_id")
+  priorityName                 String?   @map("priority_name")
+  ticketStatusId               Int?      @map("ticket_status_id")
+  ticketStatusName             String?   @map("ticket_status_name")
+  unitId                       Int?      @map("unit_id")
+  unitName                     String?   @map("unit_name")
+  informantId                  String?   @map("informant_id")
+  informantName                String?   @map("informant_name")
+  informantHp                  String?   @map("informant_hp")
+  informantEmail               String?   @map("informant_email")
+  customerId                   String?   @map("customer_id")
+  customerName                 String?   @map("customer_name")
+  customerHp                   String?   @map("customer_hp")
+  customerEmail                String?   @map("customer_email")
+  dateOriginInteraction        DateTime? @map("date_origin_interaction")
+  dateStartInteraction         DateTime? @map("date_start_interaction")
+  dateOpen                     DateTime? @map("date_open")
+  dateClose                    DateTime? @map("date_close")
+  dateLastUpdate               DateTime? @map("date_last_update")
+  dateCreatedAt                DateTime? @map("date_created_at")
+  datePickupInteraction        DateTime? @map("date_pickup_interaction")
+  dateEndInteraction           DateTime? @map("date_end_interaction")
+  dateFirstPickupInteraction   DateTime? @map("date_first_pickup_interaction")
   dateFirstResponseInteraction DateTime? @map("date_first_response_interaction")
+  isEscalated                  String?   @map("is_escalated")
+  createdById                  Int?      @map("created_by_id")
+  createdByName                String?   @map("created_by_name")
+  updatedById                  Int?      @map("updated_by_id")
+  updatedByName                String?   @map("updated_by_name")
+  channelId                    Int?      @map("channel_id")
+  channelName                  String?   @map("channel_name")
+  sessionId                    String?   @map("session_id")
+  categoryId                   Int?      @map("category_id")
+  categoryName                 String?   @map("category_name")
+  mainCategory                 String?
+  category                     String?
+  subCategory                  String?
+  detailSubCategory            String?
+  detailSubCategory2           String?
+  sla                          String?
+  slaSecond                    Int?      @map("sla_second")
+  waitingTime                  String?
+  serviceTime                  String?
+  responseTime                 String?
+  handlingTime                 String?
+  duration                     String?
+  acw                          String?
+  account                      String?
+  accountName                  String?   @map("account_name")
+  informantMemberId            String?   @map("informant_member_id")
+  customerMemberId             String?   @map("customer_member_id")
+  sentimentIncoming            String?   @map("sentiment_incoming")
+  sentimentOutgoing            String?   @map("sentiment_outgoing")
+  sentimentAll                 String?   @map("sentiment_all")
+  feedback                     String?
+  sentimentService             String?   @map("sentiment_service")
+  parentId                     String?   @map("parent_id")
+  countMerged                  Int?      @map("count_merged")
+  sourceId                     Int?      @map("source_id")
+  sourceName                   String?   @map("source_name")
+  contact                      Json?
+  surveyName                   String?   @map("survey_name")
+  interactionAdditionalInfo    Json?     @map("interaction_additional_info")
+  surveyId                     String?   @map("survey_id")
+  respondentId                 String?   @map("respondent_id")
+  ticketIdOld                  String?   @map("ticket_id_old")
+  ticketPerusahaan             String?   @map("ticket_perusahaan")
+  ticketAmount                 String?   @map("ticket_Amount")
+  ticketRemedyNo               String?   @map("ticket_Remedy_NO")
+  ticketITAO                   String?   @map("ticket_IT/AO")
+  ticketProject                String?   @map("ticket_Project")
+  ticketIdMasking              String?   @map("ticketId_masking")
+  informantNamaCorp            String?   @map("informant_nama_corp")
+  customerNamaCorp             String?   @map("customer_nama_corp")
+  datePending                  DateTime? @map("date_pending")
+  dateResolve                  DateTime? @map("date_resolve")
+  dateEskalasiEbo              DateTime? @map("date_eskalasi ebo")
+  dateEskalasiIt               DateTime? @map("date_eskalasi it")
+  dateEskalasiNo               DateTime? @map("date_eskalasi no")
+  dateEskalasi                 DateTime? @map("date_eskalasi")
+  dateMenunggu                 DateTime? @map("date_menunggu")
+  partner                      String?
+  approvalBillco               String?   @map("approval billco")
+  customerInstagramId          String?   @map("customer_instagram_id")
+  customerPhone                String?   @map("customer_phone")
+  customerFacebookId           String?   @map("customer_facebook_id")
+  eskalasi                     String?
+  inSla                        Boolean?
+  isFcr                        Boolean?
+  isPareto                     Boolean?
+  isVip                        Boolean?
+  product                      String?
+  statusTiket                  Boolean?
+  validationStatus             String?
 
-  // --- Categorization ---
-  isEscalated        String? @map("is_escalated") // "escalated" is a string in example
-  createdById        Int?    @map("created_by_id")
-  createdByName      String? @map("created_by_name")
-  updatedById        Int?    @map("updated_by_id")
-  updatedByName      String? @map("updated_by_name")
-  channelId          Int?    @map("channel_id")
-  channelName        String? @map("channel_name")
-  sessionId          String? @map("session_id")
-  categoryId         Int?    @map("category_id")
-  categoryName       String? @map("category_name")
-  mainCategory       String? // Matches "mainCategory"
-  category           String? // Matches "category"
-  subCategory        String? // Matches "subCategory"
-  detailSubCategory  String? // Matches "detailSubCategory"
-  detailSubCategory2 String? // Matches "detailSubCategory2"
-
-  // --- Metrics & SLAs ---
-  sla        String? // Example: "03:00:00" (Time Interval as String)
-  slaSecond  Int?    @map("sla_second")
-  waitingTime String? // Duration string "00:00:00"
-  serviceTime String? // Duration string
-  responseTime String? // Duration string
-  handlingTime String? // Duration string
-  duration     String?
-  acw          String? // After Call Work
-
-  // --- Additional Info ---
-  account             String?
-  accountName         String? @map("account_name")
-  informantMemberId   String? @map("informant_member_id")
-  customerMemberId    String? @map("customer_member_id")
-  sentimentIncoming   String? @map("sentiment_incoming")
-  sentimentOutgoing   String? @map("sentiment_outgoing")
-  sentimentAll        String? @map("sentiment_all")
-  feedback            String? @db.Text
-  sentimentService    String? @map("sentiment_service")
-  parentId            String? @map("parent_id")
-  countMerged         Int?    @map("count_merged")
-  sourceId            Int?    @map("source_id")
-  sourceName          String? @map("source_name")
-  
-  // This column contains JSON data in your example
-  contact             Json?   
-
-  surveyName                String? @map("survey_name")
-  interactionAdditionalInfo Json?   @map("interaction_additional_info") // Likely JSON or Text
-  surveyId                  String? @map("survey_id")
-  respondentId              String? @map("respondent_id")
-  ticketIdOld               String? @map("ticket_id_old")
-  ticketPerusahaan          String? @map("ticket_perusahaan")
-  ticketAmount              String? @map("ticket_Amount") // Capital A in source
-  ticketRemedyNo            String? @map("ticket_Remedy_NO")
-  
-  // Handling special characters in column names
-  ticketITAO                String? @map("ticket_IT/AO") 
-  
-  ticketProject             String? @map("ticket_Project")
-  ticketIdMasking           String? @map("ticketId_masking")
-  informantNamaCorp         String? @map("informant_nama_corp")
-  customerNamaCorp          String? @map("customer_nama_corp")
-
-  // --- Escalation & Resolution Dates ---
-  datePending      DateTime? @map("date_pending")
-  dateResolve      DateTime? @map("date_resolve")
-  
-  // Columns with spaces in names
-  dateEskalasiEbo  DateTime? @map("date_eskalasi ebo")
-  dateEskalasiIt   DateTime? @map("date_eskalasi it")
-  dateEskalasiNo   DateTime? @map("date_eskalasi no")
-  dateEskalasi     DateTime? @map("date_eskalasi")
-  dateMenunggu     DateTime? @map("date_menunggu")
-
-  partner            String?
-  approvalBillco     String? @map("approval billco")
-  customerInstagramId String? @map("customer_instagram_id")
-  customerPhone      String? @map("customer_phone")
-  customerFacebookId String? @map("customer_facebook_id") 
-
-    // row tambahan 
-  validationStatus  String?
-  statusTiket       Boolean?
-  product           String?
-  inSla             Boolean?
-  isFcr             Boolean?
-  eskalasi          String?
-  isVip             Boolean?
-  isPareto          Boolean?
-
+  @@index([channelName, dateStartInteraction], map: "idx_rawomnix_channel_created")
+  @@index([ticketPerusahaan], map: "idx_rawomnix_company")
+  @@index([subCategory], map: "idx_rawomnix_detail_category")
+  @@index([product, dateStartInteraction], map: "idx_rawomnix_product_created")
 }
 
 model RawCall {
-  // Synthetic ID because this data doesn't seem to have a unique Ticket ID
-  id            Int       @id @default(autoincrement())
-
-  updateStamp   DateTime? @map("Update_Stamp")
-  msisdn        String?   @map("MSISDN")
-  brand         String?   @map("BRAND")
-  unitType      String?   @map("UNIT_TYPE")
-  unitName      String?   @map("UNIT_NAME")
-  areaName      String?   @map("AREA_NAME")
-  regName       String?   @map("REG_NAME")
-  topicReason1  String?   @map("TOPIC_REASON_1")
-  topicReason2  String?   @map("TOPIC_REASON_2")
-  topicResult   String?   @map("TOPIC_RESULT")
-  service       String?   @map("SERVICE")
-  appId         String?   @map("APP_ID")
-  userId        String?   @map("USER_ID")
-  employeeCode  String?   @map("EMPLOYEE_CODE")
-  employeeName  String?   @map("EMPLOYEE_NAME")
-  
-  // Use Text for long content
-  notes         String?   @db.Text @map("NOTES")
-
-  // Optional: Add index for faster searching
-  @@index([msisdn])
-  @@index([updateStamp])
+  id           Int       @id @default(autoincrement())
+  updateStamp  DateTime? @map("Update_Stamp")
+  msisdn       String?   @map("MSISDN")
+  brand        String?   @map("BRAND")
+  unitType     String?   @map("UNIT_TYPE")
+  unitName     String?   @map("UNIT_NAME")
+  areaName     String?   @map("AREA_NAME")
+  regName      String?   @map("REG_NAME")
+  topicReason1 String?   @map("TOPIC_REASON_1")
+  topicReason2 String?   @map("TOPIC_REASON_2")
+  topicResult  String?   @map("TOPIC_RESULT")
+  service      String?   @map("SERVICE")
+  appId        String?   @map("APP_ID")
+  userId       String?   @map("USER_ID")
+  employeeCode String?   @map("EMPLOYEE_CODE")
+  employeeName String?   @map("EMPLOYEE_NAME")
+  notes        String?   @map("NOTES")
 
   @@unique([updateStamp, msisdn])
+  @@index([msisdn])
+  @@index([updateStamp])
 }
 
 model RawOca {
-  id              Int     @id @default(autoincrement())
-
-  // --- Basic Info ---
-  ticketNumber    String  @unique @map("ticket_number")
-  ticketSubject   String? @map("ticket_subject")
-  channel         String? @map("channel")
-  category        String? @map("category")
-  reporter        String? @map("reporter")
-  assignee        String? @map("assignee")
-  department      String? @map("department")
-  priority        String? @map("priority")
-  lastStatus      String? @map("last_status")
-
-  // --- Dates ---
-  ticketCreated   DateTime? @map("ticket_created")
-  lastUpdate      DateTime? @map("last_update")
-
-  // --- Details ---
-  description     String?   @db.Text @map("description")
-  customerName    String?   @map("customer_name")
-  customerPhone   String?   @map("customer_phone")
-  customerAddress String?   @map("customer_address")
-  customerEmail   String?   @map("customer_email")
-
-  // --- Durations & Times ---
-  firstResponseTime   DateTime? @map("first_response_time")
-  totalResponseTime   String?   @map("total_response_time")
-  totalResolutionTime String?   @map("total_resolution_time")
-  resolveTime         DateTime? @map("resolve_time")
-  resolvedBy          String?   @map("resolved_by")
-  closedTime          DateTime? @map("closed_time")
-  ticketDuration      String?   @map("ticket_duration")
-
-  // --- Metrics ---
-  countInboundMessage   Int?    @map("count_inbound_message")
-  labelInRoom           String? @map("label_in_room")
-  firstResponseDuration String? @map("first_response_duration")
-  
-  escalateTicket         String? @map("escalate_ticket")
-  lastAssigneeEscalation String? @map("last_assignee_escalation")
-  lastStatusEscalation   String? @map("last_status_escalation")
-  lastUpdateEscalation   String? @map("last_update_escalation")
-  
-  converse           String? @map("converse")
-  moveToOtherChannel String? @map("move_to_other_channel")
-  previousChannel    String? @map("previous_channel")
-  
-  amountRevenue BigInt? @map("amount_revenue")
-  jumlahMsisdn  String?   @map("jumlah_msisdn")
-  
-  tags          String? @map("tags")
-  idRemedyNo    String? @map("id_remedy_no")
-  
-  // Cleaned up the complex column name
-  eskalasiIdRemedyItAoEms String? @map("eskalasi_id_remedy_it_ao_ems")
-  
-  reasonOsl      String? @map("reason_osl")
-  projectId      String? @map("project_id")
-  namaPerusahaan String? @map("nama_perusahaan")
-  roaming        String? @map("roaming")
-  subCategory    String? @map("sub_category")
-  detailCategory String? @map("detail_category")
-  iot            String? @map("iot")
-  updatedAtExcel DateTime? @map("updated_at_excel") // Was "Updated at"
-
-  // row tambahan 
-  validationStatus  String?
-  statusTiket       Boolean?
-  product           String?
-  inSla             Boolean?
-  isFcr             Boolean?
-  eskalasi          String?
-  isVip             Boolean?
-  isPareto          Boolean?
+  id                      Int       @id @default(autoincrement())
+  ticketNumber            String    @unique @map("ticket_number")
+  ticketSubject           String?   @map("ticket_subject")
+  channel                 String?   @map("channel")
+  category                String?   @map("category")
+  reporter                String?   @map("reporter")
+  assignee                String?   @map("assignee")
+  department              String?   @map("department")
+  priority                String?   @map("priority")
+  lastStatus              String?   @map("last_status")
+  ticketCreated           DateTime? @map("ticket_created")
+  lastUpdate              DateTime? @map("last_update")
+  description             String?   @map("description")
+  customerName            String?   @map("customer_name")
+  customerPhone           String?   @map("customer_phone")
+  customerAddress         String?   @map("customer_address")
+  customerEmail           String?   @map("customer_email")
+  firstResponseTime       DateTime? @map("first_response_time")
+  totalResponseTime       String?   @map("total_response_time")
+  totalResolutionTime     String?   @map("total_resolution_time")
+  resolveTime             DateTime? @map("resolve_time")
+  resolvedBy              String?   @map("resolved_by")
+  closedTime              DateTime? @map("closed_time")
+  ticketDuration          String?   @map("ticket_duration")
+  countInboundMessage     Int?      @map("count_inbound_message")
+  labelInRoom             String?   @map("label_in_room")
+  firstResponseDuration   String?   @map("first_response_duration")
+  escalateTicket          String?   @map("escalate_ticket")
+  lastAssigneeEscalation  String?   @map("last_assignee_escalation")
+  lastStatusEscalation    String?   @map("last_status_escalation")
+  lastUpdateEscalation    String?   @map("last_update_escalation")
+  converse                String?   @map("converse")
+  moveToOtherChannel      String?   @map("move_to_other_channel")
+  previousChannel         String?   @map("previous_channel")
+  amountRevenue           BigInt?   @map("amount_revenue")
+  jumlahMsisdn            String?   @map("jumlah_msisdn")
+  tags                    String?   @map("tags")
+  idRemedyNo              String?   @map("id_remedy_no")
+  eskalasiIdRemedyItAoEms String?   @map("eskalasi_id_remedy_it_ao_ems")
+  reasonOsl               String?   @map("reason_osl")
+  projectId               String?   @map("project_id")
+  namaPerusahaan          String?   @map("nama_perusahaan")
+  roaming                 String?   @map("roaming")
+  subCategory             String?   @map("sub_category")
+  detailCategory          String?   @map("detail_category")
+  iot                     String?   @map("iot")
+  updatedAtExcel          DateTime? @map("updated_at_excel")
+  product                 String?
+  statusTiket             Boolean?
+  validationStatus        String?
+  eskalasi                String?
+  isPareto                Boolean?
+  isVip                   Boolean?
+  inSla                   Boolean?
+  isFcr                   Boolean?
 
   @@index([ticketNumber])
   @@index([ticketCreated])
   @@index([lastUpdate])
+  @@index([channel, ticketCreated], map: "idx_rawoca_channel_created")
+  @@index([namaPerusahaan], map: "idx_rawoca_company")
+  @@index([detailCategory], map: "idx_rawoca_detail_category")
+  @@index([eskalasi, ticketCreated], map: "idx_rawoca_eskalasi_created")
+  @@index([product, ticketCreated], map: "idx_rawoca_product_created")
 }
 
 model KIP {
-  id              Int     @id @default(autoincrement())
-  category        String?
-  subCategory     String?
-  detailCategory  String?
-  product         String?
-  subProduct      String?
+  id             Int     @id @default(autoincrement())
+  category       String?
+  subCategory    String?
+  detailCategory String?
+  product        String?
+  subProduct     String?
 
   @@index([subCategory])
-  @@index([product])  
+  @@index([product])
 }
 
 model AccountMapping {
-  id                  Int     @id @default(autoincrement())
-  b2b_account_id      String  @unique
-  corporateName       String?
-  kategoriAccount     String?
-  group               String?
-  divisi              String?
-  department          String?
-  mppCodeNew          String?
-  namaAM              String?
+  b2b_account_id  String  @unique
+  corporateName   String?
+  kategoriAccount String?
+  group           String?
+  divisi          String?
+  department      String?
+  mppCodeNew      String?
+  namaAM          String?
+  id              Int     @id @default(autoincrement())
 
   @@index([corporateName])
   @@index([kategoriAccount])
@@ -336,10 +280,59 @@ model OcaDailySync {
 }
 
 model IncidentReport {
-  id          Int   @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   title       String?
   isActive    Boolean?
   description String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   solvedAt    DateTime?
+}
+
+model RawAvaya {
+  id                Int      @id @default(autoincrement())
+  date              DateTime 
+  vector            Int      // The queue or routing identifier
+  
+  // Volume Metrics
+  inboundCalls      Int      @map("inbound_calls")
+  flowIn            Int      @map("flow_in")
+  acdCalls          Int      @map("acd_calls")
+  mainAcdCalls      Int      @map("main_acd_calls")
+  backupAcdCalls    Int      @map("backup_acd_calls")
+  connectCalls      Int      @map("connect_calls")
+  abanCalls         Int      @map("aban_calls")
+  flowOut           Int      @map("flow_out")
+  forcedBusyCalls   Int      @map("forced_busy_calls")
+  forcedDiscCalls   Int      @map("forced_disc_calls")
+
+  // Duration Metrics (Stored in seconds or original units)
+  acdTime           Int      @map("acd_time")
+  holdTime          Int      @map("hold_time")
+  
+  // Averages & Percentages (Using Decimal for precision)
+  aht               Decimal  @db.Decimal(10, 4)
+  avgSpeedAns       Decimal  @map("avg_speed_ans") @db.Decimal(10, 4)
+  avgAcdTime        Decimal  @map("avg_acd_time") @db.Decimal(10, 4)
+  avgAcwTime        Decimal  @map("avg_acw_time") @db.Decimal(10, 4)
+  avgConnectTime    Decimal  @map("avg_connect_time") @db.Decimal(10, 4)
+  avgAbanTime       Decimal  @map("avg_aban_time") @db.Decimal(10, 4)
+  avgVdnTime        Decimal  @map("avg_vdn_time") @db.Decimal(10, 4)
+  
+  percentAban       Float    @map("percent_aban")
+  percentBusy       Float    @map("percent_busy")
+  percentFlowOut    Float    @map("percent_flow_out")
+
+  // Skill Preferences
+  skillPref1        Int      @map("1st_skill_pref")
+  skillPref2        Int      @map("2nd_skill_pref")
+  skillPref3        Int      @map("3rd_skill_pref")
+
+  @@unique([date, vector]) 
+  @@index([date])
+  @@map("raw_avaya")
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
