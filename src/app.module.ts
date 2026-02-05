@@ -13,6 +13,9 @@ import { DailyOcaTicketProcessor } from './worker/processor/daily-oca-ticket-pro
 import { OcaUpsertService } from './worker/repository/oca-upsert.service';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { IncidentModule } from './modules/incident/incident.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+import { NewsModule } from './modules/news/news.module';
 
 @Module({
   imports: [
@@ -38,6 +41,19 @@ import { IncidentModule } from './modules/incident/incident.module';
     DashboardModule,
     SchedulerModule,
     IncidentModule,
+    NewsModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+      serveStaticOptions: {
+        setHeaders: (res) => {
+          // This tells the browser that this specific resource can be loaded by other origins
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          // Optional: Helps with some modern browser "Isolation" security policies
+          res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
+        },
+      },
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],

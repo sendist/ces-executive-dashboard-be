@@ -332,6 +332,21 @@ model RawAvaya {
   @@map("raw_avaya")
 }
 
+model News {
+  id          String    @id @default(cuid())
+  title       String
+  content     Json      // TipTap JSON structure
+  summary     String?   @db.Text
+  authorName  String
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // For Soft Delete
+
+  @@index([deletedAt])
+}
+
 enum UserRole {
   USER
   ADMIN
