@@ -128,7 +128,7 @@ export class OcaOmnixService {
 SELECT 
     TRIM(
         TO_CHAR(
-            (EXTRACT(HOUR FROM (ticket_timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta'))::int / 3) * 3,
+            (EXTRACT(HOUR FROM (ticket_timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta'))::int),
             '00'
         )
     ) || ':00' AS time_bucket,
