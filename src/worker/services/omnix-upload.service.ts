@@ -30,6 +30,12 @@ export class OmnixUploadService {
       'kategoriAccount',
     );
 
+    const fcrMap = await this.createLookupMap(
+      this.prisma.lookupFcr,
+      'compositeKey',
+      'isFcr',
+    );
+
    const filePath = job.data.path;
    if (!fs.existsSync(filePath)) {
     console.error(`File missing at path: ${filePath}`);
@@ -75,11 +81,14 @@ export class OmnixUploadService {
               'resolveTime': row.getCell(21).text
           }) : false;
     
-          const fcrStatus = calculateFcrStatus({
-            'ID Remedy_NO': row.getCell(71).text,
-            'Eskalasi/ID Remedy_IT/AO/EMS': row.getCell(72).text,
-            'Jumlah MSISDN': row['jumlah_msisdn']
-          });
+          // const fcrStatus = calculateFcrStatus({
+          //   'ID Remedy_NO': row.getCell(71).text,
+          //   'Eskalasi/ID Remedy_IT/AO/EMS': row.getCell(72).text,
+          //   'Jumlah MSISDN': row['jumlah_msisdn']
+          // });
+
+          const compositeFcrKey = `${row.getCell(35).text}_${row.getCell(36).text}_${row.getCell(37).text}`.trim().toLowerCase();
+          const fcrStatus = fcrMap.get(compositeFcrKey) || false;
     
           const typeEskalasi = determineEskalasi({
             'ID Remedy_NO': row.getCell(71).text, 
