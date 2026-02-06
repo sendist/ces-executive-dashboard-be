@@ -38,6 +38,13 @@ export class OcaUploadService {
       'kategoriAccount',
     );
 
+    const fcrMap = await this.createLookupMap(
+      this.prisma.lookupFcr,
+      'compositeKey',
+      'isFcr',
+    );
+
+
     const filePath = job.data.path;
     if (!fs.existsSync(filePath)) {
       console.error(`File missing at path: ${filePath}`);
@@ -92,11 +99,14 @@ export class OcaUploadService {
         resolveTime: row['Resolve Time'],
       });
 
-      const fcrStatus = calculateFcrStatus({
-        'ID Remedy_NO': row['ID Remedy_NO'],
-        'Eskalasi/ID Remedy_IT/AO/EMS': row['Eskalasi/ID Remedy_IT/AO/EMS'],
-        'Jumlah MSISDN': row['Jumlah MSISDN'],
-      });
+      // const fcrStatus = calculateFcrStatus({
+      //   'ID Remedy_NO': row['ID Remedy_NO'],
+      //   'Eskalasi/ID Remedy_IT/AO/EMS': row['Eskalasi/ID Remedy_IT/AO/EMS'],
+      //   'Jumlah MSISDN': row['Jumlah MSISDN'],
+      // });
+
+      const compositeFcrKey = `${row['Category']}_${row['Sub Category']}_${row['Detail Category']}`.trim().toLowerCase();
+      const fcrStatus = fcrMap.get(compositeFcrKey) || false;
 
       const typeEskalasi = determineEskalasi({
         'ID Remedy_NO': row['ID Remedy_NO'],

@@ -163,7 +163,6 @@ DO UPDATE SET
     "isVip"                       = EXCLUDED."isVip",
     "isPareto"                    = EXCLUDED."isPareto",
     "updated_at_excel"            = EXCLUDED."updated_at_excel"
-    WHERE "RawOca"."last_update" IS DISTINCT FROM EXCLUDED."last_update"
     RETURNING xmax
     )
     SELECT

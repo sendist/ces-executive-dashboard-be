@@ -101,10 +101,20 @@ export class OcaOmnixService {
             TO_CHAR("ticket_timestamp" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD') AS "date",
             COUNT(*)::int AS "value",
             CASE 
-                WHEN COUNT(*) FILTER (WHERE "statusTiket" = true) > 0 THEN
+                WHEN COUNT(*) FILTER (
+                    WHERE "statusTiket"
+                    AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                ) > 0 THEN
                     ROUND(
-                        COUNT(*) FILTER (WHERE "inSla" AND "statusTiket")::decimal
-                        / COUNT(*) FILTER (WHERE "statusTiket" = true)::decimal
+                        COUNT(*) FILTER (
+                            WHERE "inSla"  AND "statusTiket"
+                            AND "statusTiket"
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                        )::numeric
+                        / COUNT(*) FILTER (
+                            WHERE "statusTiket"
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                        )::numeric
                         * 100,
                         2
                     )
@@ -249,7 +259,7 @@ ORDER BY 1 ASC;
 
     -- 3. THE AGGREGATION (Runs on the combined result above)
     SELECT
-        channel,
+        MIN(channel) AS channel,
         source_origin, -- Grab this so we know which table to query for details later
         COUNT(*) FILTER (WHERE "statusTiket" = true)::int as "total",
         
@@ -280,7 +290,7 @@ ORDER BY 1 ASC;
         CASE WHEN COUNT(*) > 0 THEN ROUND((COUNT(*) FILTER (WHERE "isPareto" = false)::decimal / COUNT(*)) * 100, 2) ELSE 0 END as "pctNotPareto"
 
     FROM "UnifiedData"
-    GROUP BY "channel", "source_origin"
+    GROUP BY LOWER("channel"), "source_origin"
   `;
 
     // Fetch "Top Corporate" and "Top KIP" separately because merging them into the GroupBy above is extremely expensive and complex

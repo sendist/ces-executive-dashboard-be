@@ -347,6 +347,21 @@ model News {
   @@index([deletedAt])
 }
 
+model LookupFcr {
+  id              Int @id @default(autoincrement())
+  category        String? 
+  subCategory     String?
+  detailCategory  String?
+  compositeKey    String?
+  fcrNonSatuan    String?
+  escToSatuan     String?
+  fcrNonMassal    String?
+  escToMassal     String?
+  isFcr           Boolean?
+
+  @@map("lookup_fcr")
+}
+
 enum UserRole {
   USER
   ADMIN
