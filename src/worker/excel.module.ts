@@ -11,6 +11,7 @@ import { OmnixUploadService } from './services/omnix-upload.service';
 import { OcaUpsertService } from './repository/oca-upsert.service';
 import { OcaReportSchedulerService } from './scheduler/oca-report-scheduler.service';
 import { AvayaUploadService } from './services/avaya-upload.service';
+import { CsatReportSchedulerService } from './scheduler/csat-report-scheduler.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AvayaUploadService } from './services/avaya-upload.service';
     PrismaService,
     OcaUpsertService,
     OcaReportSchedulerService,
+    CsatReportSchedulerService,
   ],
   exports: [BullModule], 
 })
