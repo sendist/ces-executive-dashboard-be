@@ -27,8 +27,8 @@ export class OcaUploadService {
 
   async process(job: Job) {
     const kipMap = await this.createLookupMap(
-      this.prisma.kIP,
-      'subCategory',
+      this.prisma.lookupKIP,
+      'compositeKey',
       'product',
     );
 
@@ -39,7 +39,7 @@ export class OcaUploadService {
     );
 
     const fcrMap = await this.createLookupMap(
-      this.prisma.lookupFcr,
+      this.prisma.lookupKIP,
       'compositeKey',
       'isFcr',
     );
@@ -71,12 +71,12 @@ export class OcaUploadService {
     for await (const row of stream) {
       const classification = this.classifyTicket(row);
 
-      const rawSubCategory = row['Sub Category'];
-      const normalizedSubCategory =
-        typeof rawSubCategory === 'string'
-          ? rawSubCategory.trim().toLowerCase()
-          : '';
-      const derivedProduct = kipMap.get(normalizedSubCategory || '');
+      // const rawSubCategory = row['Sub Category'];
+      // const normalizedSubCategory =
+      //   typeof rawSubCategory === 'string'
+      //     ? rawSubCategory.trim().toLowerCase()
+      //     : '';
+      // const derivedProduct = kipMap.get(normalizedSubCategory || '');
 
       const rawNamaPerusahaan = row['Nama Perusahaan'];
       const normalizedNamaPerusahaan =
@@ -89,6 +89,14 @@ export class OcaUploadService {
 
       const ticketSubject = row['Ticket Subject'] || '';
       const isVip = this.vipRegex.test(ticketSubject);
+
+      const compositeFcrKey =
+        `${row['Category']}_${row['Sub Category']}_${row['Detail Category']}`
+          .trim()
+          .toLowerCase();
+      const fcrStatus = fcrMap.get(compositeFcrKey) || false;
+
+      const derivedProduct = kipMap.get(compositeFcrKey || '-');
 
       // --- 2. RUN SLA CALCULATION ---
       // Now we pass the 'derivedProduct' as 'Kolom BF'
@@ -103,12 +111,6 @@ export class OcaUploadService {
       //   'Eskalasi/ID Remedy_IT/AO/EMS': row['Eskalasi/ID Remedy_IT/AO/EMS'],
       //   'Jumlah MSISDN': row['Jumlah MSISDN'],
       // });
-
-      const compositeFcrKey =
-        `${row['Category']}_${row['Sub Category']}_${row['Detail Category']}`
-          .trim()
-          .toLowerCase();
-      const fcrStatus = fcrMap.get(compositeFcrKey) || false;
 
       const typeEskalasi = determineEskalasi({
         'ID Remedy_NO': row['ID Remedy_NO'],
@@ -180,7 +182,7 @@ export class OcaUploadService {
         // row tambahan
         validationStatus: classification.status,
         statusTiket: classification.isValid,
-        product: derivedProduct,
+        product: derivedProduct?.toUpperCase() || '-',
         sla: slaStatus,
         fcr: fcrStatus,
         eskalasi: typeEskalasi,

@@ -347,7 +347,7 @@ model News {
   @@index([deletedAt])
 }
 
-model LookupFcr {
+model LookupKIP {
   id              Int @id @default(autoincrement())
   category        String? 
   subCategory     String?
@@ -358,8 +358,12 @@ model LookupFcr {
   fcrNonMassal    String?
   escToMassal     String?
   isFcr           Boolean?
+  product         String?
 
-  @@map("lookup_fcr")
+  @@index([compositeKey])
+  @@index([isFcr])
+  @@index([product])
+  @@map("lookup_kip")
 }
 
 enum UserRole {
