@@ -31,6 +31,15 @@ export class OcaOmnixService {
                 "date_start_interaction" as "ticket_timestamp",
                 "channel_name" as "channel"
             FROM "RawOmnix"
+               
+            UNION ALL
+            SELECT
+                'closed' as "last_status",
+                "statusTiket",
+                "inSla",
+                "update_stamp" as "ticket_timestamp",
+                "unit_type" as "channel"
+            FROM "RawCall"
         )
     `;
 
@@ -46,20 +55,20 @@ export class OcaOmnixService {
             -- totalTickets: filtered by channel
             COUNT(*) FILTER (
                 WHERE "statusTiket"
-                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
             )::int AS "totalTickets",
 
             -- totalOpen: filtered by channel + status
             COUNT(*) FILTER (
                 WHERE "statusTiket"
-                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                 AND NOT ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
             )::int AS "totalOpen",
 
             -- totalClosed: filtered by channel + status
             COUNT(*) FILTER (
                 WHERE "statusTiket"
-                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                 AND ("last_status" ILIKE 'close%' OR "last_status" ILIKE 'resolve%')
             )::int AS "totalClosed",
 
@@ -67,17 +76,17 @@ export class OcaOmnixService {
             CASE
                 WHEN COUNT(*) FILTER (
                     WHERE "statusTiket"
-                    AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                    AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                 ) > 0 THEN
                     ROUND(
                         COUNT(*) FILTER (
                             WHERE "inSla"  AND "statusTiket"
                             AND "statusTiket"
-                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                         )::numeric
                         / COUNT(*) FILTER (
                             WHERE "statusTiket"
-                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                         )::numeric
                         * 100,
                         2
@@ -103,17 +112,17 @@ export class OcaOmnixService {
             CASE 
                 WHEN COUNT(*) FILTER (
                     WHERE "statusTiket"
-                    AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                    AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                 ) > 0 THEN
                     ROUND(
                         COUNT(*) FILTER (
                             WHERE "inSla"  AND "statusTiket"
                             AND "statusTiket"
-                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                         )::numeric
                         / COUNT(*) FILTER (
                             WHERE "statusTiket"
-                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message'])
+                            AND "channel" ILIKE ANY (ARRAY['email', 'livechat', 'whatsapp', 'ig message', 'callcenter'])
                         )::numeric
                         * 100,
                         2
@@ -255,6 +264,21 @@ ORDER BY 1 ASC;
         'OMNIX' as "source_origin"
       FROM "RawOmnix"
       WHERE "date_start_interaction" BETWEEN ${filter.startDate}::timestamp AND ${filter.endDate}::timestamp
+    
+      UNION ALL
+      SELECT
+        "unit_type" as "channel",
+        "statusTiket",
+        "inSla",
+        'closed' as "last_status",
+        "product",
+        NULL::timestamp as "resolve_time",
+        "update_stamp" as "ticket_created",
+        "isFcr",
+        "isPareto",
+        'CALL' as "source_origin"
+      FROM "RawCall"
+      WHERE "update_stamp" BETWEEN ${filter.startDate}::timestamp AND ${filter.endDate}::timestamp
     )
 
     -- 3. THE AGGREGATION (Runs on the combined result above)
@@ -320,7 +344,7 @@ ORDER BY 1 ASC;
     filter: DashboardFilterDto,
     channel: string,
     metricType: 'nama_perusahaan' | 'detail_category',
-    source: 'OCA' | 'OMNIX',
+    source: 'OCA' | 'OMNIX' | "CALL",
   ) {
     let tableName = '';
     let metricColumn = ''; // The target column (Company or Category)
@@ -333,6 +357,17 @@ ORDER BY 1 ASC;
       metricColumn = `"${metricType}"`; // e.g. "nama_perusahaan"
       dateColumn = '"ticket_created"';
       channelColumn = '"channel"'; // OCA uses "channel"
+    } else if (source === 'CALL') {
+      tableName = '"RawCall"';
+      dateColumn = '"update_stamp"';
+      channelColumn = '"unit_type"'; // CALL uses "unit_type"
+
+      // Map the metric types to Call columns
+      if (metricType === 'nama_perusahaan') {
+        metricColumn = '"corp"'; // Replace with actual Call column
+      } else {
+        metricColumn = '"topic_reason_2"'; // Replace with actual Call column
+      }
     } else {
       tableName = '"RawOmnix"';
       dateColumn = '"date_start_interaction"';
