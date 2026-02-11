@@ -115,7 +115,7 @@ export class CsatReportSchedulerService {
           );
         }
         // 2. Check if it's a 404 but the ID is just totally unknown yet
-        else if (error.response?.status === 404) {
+        else if (error.response?.status === 404 || error.response?.status === 406) {
           this.logger.warn(`Document ID not recognized yet. Retrying...`);
         }
         // 3. It's a real error (401 Unauthorized, 500 Server Error, etc.)
